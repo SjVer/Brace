@@ -89,7 +89,7 @@ static void repl()
 	char line[1024];
 	for (;;)
 	{
-		printf("lox:> ");
+		printf("brc:> ");
 	
 		if (!fgets(line, sizeof(line), stdin))
 		{
@@ -163,7 +163,7 @@ int main(int argc, const char *argv[])
 	}
 	else
 	{
-		fprintf(stderr, "Usage: clox [path]\n");
+		fprintf(stderr, "Usage: brace [path]\n");
 		exit(64);
 	}
 

@@ -1,7 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#include "memory.h"
+#include "mem.h"
 #include "value.h"
 #include "object.h"
 
@@ -34,40 +35,40 @@ void freeValueArray(ValueArray *array)
     initValueArray(array);
 }
 
-// // not from book
-// char* valueToCString(Value value)
-// {
-//     switch (value.type)
-//     {
-//     case VAL_BOOL:
-//         return AS_BOOL(value) ? "true" : "false";
-//     case VAL_NIL:
-//         return "nil";
-//     case VAL_NUMBER:
-//         return ("%g", AS_NUMBER(value));
-//     case VAL_OBJ:
-//         printObject(value);
-//         break;
-//     }
-// }
-
-void printValue(Value value)
+char *valueToString(Value value)
 {
     switch (value.type)
     {
-    case VAL_BOOL:
-        printf(AS_BOOL(value) ? "true" : "false");
-        break;
     case VAL_NIL:
-        printf("nil");
-        break;
+        return "nil";
+    case VAL_BOOL:
+        return AS_BOOL(value) ? "true" : "false";
     case VAL_NUMBER:
-        printf("%g", AS_NUMBER(value));
-        break;
+        return formatString("%g", AS_NUMBER(value));
     case VAL_OBJ:
-        printObject(value);
-        break;
+        return objectToString(value);
     }
+    return "<VALUE-TO-STRING-ERROR>";
+}
+
+void printValue(Value value)
+{
+    // switch (value.type)
+    // {
+    // case VAL_BOOL:
+    //     printf(AS_BOOL(value) ? "true" : "false");
+    //     break;
+    // case VAL_NIL:
+    //     printf("nil");
+    //     break;
+    // case VAL_NUMBER:
+    //     printf("%g", AS_NUMBER(value));
+    //     break;
+    // case VAL_OBJ:
+    //     printObject(value);
+    //     break;
+    // }
+    printf("%s", valueToString(value));
 }
 
 bool valuesEqual(Value a, Value b)

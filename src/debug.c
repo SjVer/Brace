@@ -95,6 +95,13 @@ int disassembleInstruction(Chunk *chunk, int offset)
         return constantInstruction("OP_SET_PROPERTY", chunk, offset);
     case OP_GET_SUPER:
         return constantInstruction("OP_GET_SUPER", chunk, offset);
+    case OP_ARRAY:
+        return byteInstruction("OP_ARRAY", chunk, offset);
+    // {
+    //     offset++;
+    //     uint8_t length = chunk->code[offset++];
+    //     printf("%-16s %4d", "OP_ARRAY", length);
+    // }
     case OP_EQUAL:
         return simpleInstruction("OP_EQUAL", offset);
     case OP_GREATER:
@@ -157,6 +164,8 @@ int disassembleInstruction(Chunk *chunk, int offset)
         return constantInstruction("OP_METHOD", chunk, offset);
     case OP_RETURN:
         return simpleInstruction("OP_RETURN", offset);
+    case OP_EXIT:
+        return simpleInstruction("OP_EXIT", offset);
     default:
         printf("Unknown opcode %d\n", instruction);
         return offset + 1;

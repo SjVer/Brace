@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "table.h"
-#include "memory.h"
+#include "mem.h"
 #include "object.h"
 #include "value.h"
 

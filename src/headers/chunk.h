@@ -1,5 +1,5 @@
-#ifndef clox_chunk_h
-#define clox_chunk_h
+#ifndef brace_chunk_h
+#define brace_chunk_h
 
 #include "common.h"
 #include "value.h"
@@ -21,6 +21,7 @@ typedef enum
 	OP_GET_PROPERTY,
 	OP_SET_PROPERTY,
 	OP_GET_SUPER,
+	OP_ARRAY,
 	OP_EQUAL,
 	OP_GREATER,
 	OP_LESS,
@@ -43,6 +44,7 @@ typedef enum
 	OP_INHERIT,
 	OP_METHOD,
 	OP_RETURN,
+	OP_EXIT,
 } OpCode;
 
 typedef struct

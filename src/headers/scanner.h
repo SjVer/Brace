@@ -1,5 +1,5 @@
-#ifndef clox_scanner_h
-#define clox_scanner_h
+#ifndef brace_scanner_h
+#define brace_scanner_h
 
 typedef enum
 {
@@ -8,6 +8,8 @@ typedef enum
 	TOKEN_RIGHT_PAREN,
 	TOKEN_LEFT_BRACE,
 	TOKEN_RIGHT_BRACE,
+	TOKEN_LEFT_B_BRACE,
+	TOKEN_RIGHT_B_BRACE,
 	TOKEN_COMMA,
 	TOKEN_DOT,
 	TOKEN_MINUS,
@@ -42,6 +44,7 @@ typedef enum
 	TOKEN_NIL,
 	TOKEN_OR,
 	TOKEN_PRINT,
+	TOKEN_EXIT,
 	TOKEN_RETURN,
 	TOKEN_SUPER,
 	TOKEN_THIS,

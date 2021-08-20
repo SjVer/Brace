@@ -1,5 +1,5 @@
-#ifndef clox_object_h
-#define clox_object_h
+#ifndef brace_object_h
+#define brace_object_h
 
 #include "common.h"
 #include "value.h"
@@ -15,18 +15,21 @@
 #define IS_INSTANCE(value) isObjType(value, OBJ_INSTANCE)
 #define IS_NATIVE(value) isObjType(value, OBJ_NATIVE)
 #define IS_STRING(value) isObjType(value, OBJ_STRING)
+#define IS_ARRAY(value) isObjType(value, OBJ_ARRAY)
 
 #define AS_BOUND_METHOD(value) ((ObjBoundMethod *)AS_OBJ(value))
 #define AS_CLASS(value) ((ObjClass *)AS_OBJ(value))
 #define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
 #define AS_INSTANCE(value) ((ObjInstance *)AS_OBJ(value))
-#define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value))->function)
+#define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value)))//->function)
 #define AS_STRING(value) ((ObjString *)AS_OBJ(value))
 #define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)
+#define AS_ARRAY(value) ((ObjArray *)AS_OBJ(value))
 
 typedef enum
 {
+	OBJ_ARRAY,
 	OBJ_BOUND_METHOD,
 	OBJ_CLASS,
 	OBJ_CLOSURE,
@@ -50,6 +53,8 @@ typedef struct
 {
 	Obj obj;
 	NativeFn function;
+	int arity;
+	ObjString *name;
 } ObjNative;
 
 typedef struct
@@ -92,13 +97,15 @@ typedef struct
 	Table methods;
 } ObjClass;
 
-typedef struct {
+typedef struct
+{
   Obj obj;
   ObjClass* klass;
   Table fields; 
 } ObjInstance;
 
-typedef struct {
+typedef struct
+{
   Obj obj;
   // the calling instance is stored
   // for the 'this' variable
@@ -106,15 +113,25 @@ typedef struct {
   ObjClosure* method;
 } ObjBoundMethod;
 
+typedef struct
+{
+	Obj obj;
+	ValueArray array;
+} ObjArray;
+
+
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method);
 ObjClass *newClass(ObjString *name);
 ObjClosure *newClosure(ObjFunction *function);
 ObjFunction *newFunction();
 ObjInstance *newInstance(ObjClass *klass);
-ObjNative *newNative(NativeFn function);
+ObjNative *newNative(NativeFn function, int arity, const char *name);
 ObjUpvalue *newUpvalue(Value *slot);
+// ObjArray *newArray(Value *items, int length);
+ObjArray *newArray();
 ObjString *takeString(char *chars, int length);
 ObjString *copyString(const char *chars, int length);
+char *objectToString(Value value);
 void printObject(Value value);
 // checks wether the given Value is of ObjType type
 static inline bool isObjType(Value value, ObjType type)

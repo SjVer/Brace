@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "memory.h"
+#include "mem.h"
 #include "object.h"
 #include "value.h"
 #include "table.h"
@@ -69,10 +69,12 @@ ObjClosure *newClosure(ObjFunction *function)
 }
 
 // allocates and returns a new native function
-ObjNative *newNative(NativeFn function)
+ObjNative *newNative(NativeFn function, int arity, const char *name)
 {
 	ObjNative *native = ALLOCATE_OBJ(ObjNative, OBJ_NATIVE);
 	native->function = function;
+	native->arity = arity;
+	native->name = copyString(name, strlen(name));
 	return native;
 }
 
@@ -102,6 +104,19 @@ ObjUpvalue *newUpvalue(Value *slot)
 	upvalue->location = slot;
 	upvalue->next = NULL;
 	return upvalue;
+}
+
+// ObjArray *newArray(Value *items, int length)
+ObjArray *newArray()
+{
+	ObjArray *array = ALLOCATE_OBJ(ObjArray, OBJ_ARRAY);
+	initValueArray(&array->array);
+
+	// // copy values over
+	// for (int i = 0; i < length; i++)
+	// 	writeValueArray(&array->items, items[i]);
+
+	return array;
 }
 
 // allocates a ObjString
@@ -161,48 +176,107 @@ ObjString *copyString(const char *chars, int length)
 	return allocateString(heapChars, length, hash);
 }
 
-// prints a function
-static void printFunction(ObjFunction *function)
+static char *functionToString(ObjFunction *function)
+// static void printFunction(ObjFunction *function)
 {
 	if (function->name == NULL)
+		return "<script>";
+	return formatString("<function %s>", function->name->chars);
+}
+
+static char *arrayToString(ObjArray *array)
+{
+	char *ret = "[";
+	for (int i = 0; i < array->array.count; i++)
 	{
-		printf("<script>");
-		return;
+		ret = formatString("%s%s%s",
+			ret,
+			IS_STRING(array->array.values[i]) ? 
+				formatString("\"%s\"", valueToString(array->array.values[i]))
+				: valueToString(array->array.values[i]),
+			i + 1 != array->array.count ? ", " : "");
 	}
-	printf("<function %s>", function->name->chars);
+	return formatString("%s]", ret);
+}
+
+char *objectToString(Value value)
+{
+	switch (OBJ_TYPE(value))
+	{
+	case OBJ_BOUND_METHOD:
+		return formatString("<method %s of instance %s>",
+			AS_BOUND_METHOD(value)->method->function->name->chars,
+			AS_INSTANCE(AS_BOUND_METHOD(value)->receiver)->klass->name->chars);
+	
+	case OBJ_CLASS:
+		return formatString("<class %s>", AS_CLASS(value)->name->chars);
+	
+	case OBJ_CLOSURE:
+		return functionToString(AS_CLOSURE(value)->function);
+
+	case OBJ_FUNCTION:
+		return functionToString(AS_FUNCTION(value));
+	
+	case OBJ_INSTANCE:
+		return formatString("<%s instance>", AS_INSTANCE(value)->klass->name->chars);
+	
+	case OBJ_NATIVE:
+		return formatString("<native function %s>", AS_NATIVE(value)->name->chars);
+
+	case OBJ_STRING:
+		return AS_CSTRING(value);
+	
+	case OBJ_UPVALUE:
+		return "<upvalue>";
+
+	case OBJ_ARRAY:
+		return arrayToString(AS_ARRAY(value));
+	}
+	return "<OBJ-TO-STRING-ERROR>";
 }
 
 // prints an Obj
 void printObject(Value value)
 {
-	switch (OBJ_TYPE(value))
-	{
-	case OBJ_BOUND_METHOD:
-		// printFunction(AS_BOUND_METHOD(value)->method->function);
-		printf("<method %s of %s instance>",
-			AS_BOUND_METHOD(value)->method->function->name->chars,
-			AS_INSTANCE(AS_BOUND_METHOD(value)->receiver)->klass->name->chars);
-		break;
-	case OBJ_CLASS:
-		printf("<class %s>", AS_CLASS(value)->name->chars);
-		break;
-	case OBJ_CLOSURE:
-		printFunction(AS_CLOSURE(value)->function);
-		break;
-	case OBJ_FUNCTION:
-		printFunction(AS_FUNCTION(value));
-		break;
-	case OBJ_INSTANCE:
-		printf("<%s instance>", AS_INSTANCE(value)->klass->name->chars);
-		break;
-	case OBJ_NATIVE:
-		printf("<native function>");
-		break;
-	case OBJ_STRING:
-		printf("%s", AS_CSTRING(value));
-		break;
-	case OBJ_UPVALUE:
-		printf("<upvalue>");
-		break;
-	}
+	// switch (OBJ_TYPE(value))
+	// {
+	// case OBJ_BOUND_METHOD:
+	// 	// printFunction(AS_BOUND_METHOD(value)->method->function);
+	// 	printf("<method %s of %s instance>",
+	// 		AS_BOUND_METHOD(value)->method->function->name->chars,
+	// 		AS_INSTANCE(AS_BOUND_METHOD(value)->receiver)->klass->name->chars);
+	// 	break;
+	// case OBJ_CLASS:
+	// 	printf("<class %s>", AS_CLASS(value)->name->chars);
+	// 	break;
+	// case OBJ_CLOSURE:
+	// 	printFunction(AS_CLOSURE(value)->function);
+	// 	break;
+	// case OBJ_FUNCTION:
+	// 	printFunction(AS_FUNCTION(value));
+	// 	break;
+	// case OBJ_INSTANCE:
+	// 	printf("<%s instance>", AS_INSTANCE(value)->klass->name->chars);
+	// 	break;
+	// case OBJ_NATIVE:
+	// 	printf("<native function>");
+	// 	break;
+	// case OBJ_STRING:
+	// 	printf("%s", AS_CSTRING(value));
+	// 	break;
+	// case OBJ_UPVALUE:
+	// 	printf("<upvalue>");
+	// 	break;
+	// case OBJ_ARRAY:
+	// 	printf("[");
+	// 	// Value *item = AS_ARRAY(value)->items.values;
+	// 	for (int i = 0; i < AS_ARRAY(value)->length; i++)
+	// 	{
+	// 		printValue(AS_ARRAY(value)->items.values[i]);
+	// 		printf(i == AS_ARRAY(value)->length - 1 ? "" : ", ");
+	// 	}
+	// 	printf("]");
+	// 	break;
+	// }
+	printf("%s", objectToString(value));
 }

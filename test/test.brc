@@ -1,0 +1,2 @@
+class a { meth() {} }
+print a().meth; 

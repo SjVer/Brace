@@ -5,8 +5,9 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 
-#include "memory.h"
+#include "mem.h"
 #include "object.h"
 #include "vm.h"
 #ifdef DEBUG_LOG_GC
@@ -111,6 +112,12 @@ static void blackenObject(Obj *object)
         ObjInstance *instance = (ObjInstance *)object;
         markObject((Obj *)instance->klass);
         markTable(&instance->fields);
+        break;
+    }
+    case OBJ_ARRAY:
+    {
+        ObjArray *array = (ObjArray *)object;
+        markArray(&array->array);
         break;
     }
 
@@ -307,6 +314,12 @@ static void freeObject(Obj *object)
         FREE(ObjUpvalue, object);
         break;
     }
+    case OBJ_ARRAY:
+    {
+        ObjArray *array = (ObjArray *)object;
+        freeValueArray(&array->array);
+        FREE(ObjArray, object);
+    }
     }
 }
 
@@ -321,4 +334,29 @@ void freeObjects()
         object = next;
     }
     free(vm.grayStack);
+}
+
+char *formatString(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+
+    int smallSize = sizeof(char) * 1024;
+    char *smallBuffer = malloc(smallSize);
+    
+    int size = vsnprintf(smallBuffer, smallSize, format, args);
+
+    va_end(args);
+    
+    if (size < sizeof smallBuffer)
+        return smallBuffer;
+
+    int bigSize = sizeof(char) * (size + 1);
+    char *buffer = malloc(bigSize);
+
+    va_start(args, format);
+    vsnprintf(buffer, bigSize, format, args);
+    va_end(args);
+    
+    return buffer;
 }

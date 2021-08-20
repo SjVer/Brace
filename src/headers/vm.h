@@ -1,5 +1,5 @@
-#ifndef CLOX_VM_H
-#define CLOX_VM_H
+#ifndef brace_vm_h
+#define brace_vm_h
 
 #include "object.h"
 #include "table.h"
@@ -45,6 +45,10 @@ typedef enum
 
 extern VM vm;
 
+void runtimeError(const char *format, ...);
+void defineNative(
+	const char *name, NativeFn function, int arity);
+bool isFalsey(Value value);
 void initVM();
 void freeVM();
 InterpretResult interpret(const char *source);

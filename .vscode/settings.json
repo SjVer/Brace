@@ -14,7 +14,21 @@
         "utility": "c",
         "optional": "cpp",
         "system_error": "cpp",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "stdlib.h": "c",
+        "*.tcc": "c",
+        "exception": "c",
+        "algorithm": "c",
+        "cmath": "c",
+        "random": "c",
+        "fstream": "c",
+        "limits": "c",
+        "numeric": "c",
+        "streambuf": "c",
+        "thread": "c",
+        "typeinfo": "c",
+        "valarray": "c",
+        "mem.h": "c"
     },
     "C_Cpp.intelliSenseEngine": "Default"
 }

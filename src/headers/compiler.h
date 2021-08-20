@@ -1,5 +1,5 @@
-#ifndef clox_compiler_h
-#define clox_compiler_h
+#ifndef brace_compiler_h
+#define brace_compiler_h
 
 #include "vm.h"
 

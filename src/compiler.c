@@ -6,7 +6,7 @@
 #include "compiler.h"
 #include "scanner.h"
 #include "object.h"
-#include "memory.h"
+#include "mem.h"
 #ifdef DEBUG_PRINT_CODE
 #include "debug.h"
 #endif
@@ -118,6 +118,7 @@ static void funDeclaration();
 static void expressionStatement();
 static void printStatement();
 static void returnStatement();
+static void exitStatement();
 static void ifStatement();
 static void forStatement();
 static void whileStatement();
@@ -136,6 +137,7 @@ static void or_(bool canAssign);
 static void dot(bool canAssign);
 static void this_(bool canAssign);
 static void super_(bool canAssign);
+static void b_brace(bool canAssign);
 
 static void namedVariable(Token name, bool canAssing);
 
@@ -172,7 +174,6 @@ static void errorAt(Token *token, const char *message)
 // displays an error at the previous token with the given message
 static void error(const char *message)
 {
-	*(int*)0 = 0;
 	errorAt(&parser.previous, message);
 }
 
@@ -456,6 +457,8 @@ ParseRule rules[] = {
 	[TOKEN_RIGHT_PAREN] 	= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_LEFT_BRACE] 		= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_RIGHT_BRACE] 	= {NULL, 	NULL,   PREC_NONE},
+	[TOKEN_LEFT_B_BRACE] 	= {b_brace, NULL,   PREC_NONE},
+	[TOKEN_RIGHT_B_BRACE] 	= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_COMMA] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_DOT] 			= {NULL, 	dot,   	PREC_CALL},
 	[TOKEN_MINUS] 			= {unary, 	binary, PREC_TERM},
@@ -484,6 +487,7 @@ ParseRule rules[] = {
 	[TOKEN_NIL] 			= {literal,	NULL,   PREC_NONE},
 	[TOKEN_OR] 				= {NULL, 	or_, 	PREC_OR},
 	[TOKEN_PRINT] 			= {NULL, 	NULL,   PREC_NONE},
+	[TOKEN_EXIT] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_RETURN] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_SUPER] 			= {super_, 	NULL,   PREC_NONE},
 	[TOKEN_THIS] 			= {this_, 	NULL,   PREC_NONE},
@@ -802,23 +806,23 @@ static void declaration()
 static void statement()
 {
 	if (match(TOKEN_PRINT))
-	{
 		printStatement();
-	}
-	else if (match(TOKEN_FOR)) {
+
+	else if (match(TOKEN_FOR))
     	forStatement();
-	}
+
 	else if (match(TOKEN_IF))
-	{
 		ifStatement();
-	}
-	else if (match(TOKEN_RETURN)) {
+
+	else if (match(TOKEN_RETURN))
     	returnStatement();
-	}
+
+	else if (match(TOKEN_EXIT))
+		exitStatement();
+
 	else if (match(TOKEN_WHILE))
-	{
 		whileStatement();
-	}
+
 	else if (match(TOKEN_LEFT_BRACE))
 	{
 		beginScope();
@@ -826,9 +830,7 @@ static void statement()
 		endScope();
 	}
 	else
-	{
 		expressionStatement();
-	}
 }
 
 // compiles a variable declaration
@@ -961,6 +963,23 @@ static void returnStatement()
 	}
 }
 
+// compiles an exit statement
+static void exitStatement()
+{
+	if (match(TOKEN_SEMICOLON))
+	{
+		// uint32_t retval = makeConstant(NUMBER_VAL(0));
+		emitConstant(NUMBER_VAL(0));
+		emitByte(OP_EXIT);
+	}
+	else
+	{
+		expression();
+		consume(TOKEN_SEMICOLON, "Expect ';' after exit value.");
+		emitByte(OP_EXIT);
+	}
+}
+
 // compiles an if statement
 static void ifStatement()
 {
@@ -1067,6 +1086,22 @@ static void number(bool canAssign)
 {
 	double value = strtod(parser.previous.start, NULL);
 	emitConstant(NUMBER_VAL(value));
+}
+
+// compiles an array
+static void b_brace(bool canAssing)
+{
+	int length = 0;
+	while (!check(TOKEN_RIGHT_B_BRACE) && !check(TOKEN_EOF))
+	{
+		expression();
+		if (!check(TOKEN_RIGHT_B_BRACE))
+			consume(TOKEN_COMMA, "Expect ',' between values");
+		length++;
+	}
+	consume(TOKEN_RIGHT_B_BRACE, "Expect ']' after array.");
+
+	emitBytes(OP_ARRAY, (uint8_t)length);
 }
 
 // compiles a string

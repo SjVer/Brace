@@ -3,37 +3,19 @@
 #endif
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <unistd.h>
-#include <time.h>
+#include <stdlib.h>
 
 #include "compiler.h"
 #include "common.h"
 #include "debug.h"
 #include "object.h"
-#include "memory.h"
+#include "mem.h"
+#include "natives.h"
 #include "vm.h"
 
 VM vm;
-
-// ------- NATIVES -----------
-static Value clockNative(int argCount, Value *args)
-{
-	return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
-}
-static Value clearNative(int argCount, Value *args)
-{
-	system("@cls||clear");
-	return NIL_VAL;
-}
-static Value sleepNative(int argCount, Value *args)
-{
-	sleep(AS_NUMBER(args[0]));
-	return NIL_VAL;
-}
-// ---------------------------
 
 // reset the stack
 static void resetStack()
@@ -44,7 +26,7 @@ static void resetStack()
 }
 
 // display a runtime error
-static void runtimeError(const char *format, ...)
+void runtimeError(const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
@@ -71,10 +53,10 @@ static void runtimeError(const char *format, ...)
 	resetStack();
 }
 
-static void defineNative(const char *name, NativeFn function)
+void defineNative(const char *name, NativeFn function, int arity)
 {
 	push(OBJ_VAL(copyString(name, (int)strlen(name))));
-	push(OBJ_VAL(newNative(function)));
+	push(OBJ_VAL(newNative(function, arity, name)));
 	tableSet(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
 	pop();
 	pop();
@@ -96,9 +78,7 @@ void initVM()
 	vm.initString = NULL;
 	vm.initString = copyString("init", 4);
 
-	defineNative("clock", clockNative);
-	defineNative("clear", clearNative);
-	defineNative("sleep", sleepNative);
+	defineNatives();
 }
 
 // free the VM
@@ -190,8 +170,20 @@ static bool callValue(Value callee, int argCount)
 			return call(AS_CLOSURE(callee), argCount);
 		case OBJ_NATIVE:
 		{
-			NativeFn native = AS_NATIVE(callee);
-			Value result = native(argCount, vm.stackTop - argCount);
+			// NativeFn native = AS_NATIVE(callee);
+			ObjNative *native = AS_NATIVE(callee);
+
+			if (argCount != native->arity)
+			{
+				runtimeError("Expected %d arguments but got %d.", native->arity, argCount);
+				return false;
+			}
+
+			Value result = native->function(argCount, vm.stackTop - argCount);
+			// -1 as result type marks runtimeError inside native
+			if (result.type == -1)
+				return false;
+
 			vm.stackTop -= argCount + 1;
 			push(result);
 			return true;
@@ -311,9 +303,38 @@ static void defineMethod(ObjString *name)
 }
 
 // check wether the given value returns to false
-static bool isFalsey(Value value)
+bool isFalsey(Value value)
 {
-	return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
+	// return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
+	if (IS_NIL(value)) return false;
+	
+	else if (IS_BOOL(value))
+		return AS_BOOL(value);
+	
+	else if (IS_NUMBER(value))
+		return AS_NUMBER(value) == 0;
+	
+	else if (IS_OBJ(value))
+	{
+		switch (value.as.obj->type)
+		{
+		case OBJ_STRING:
+			return AS_STRING(value)->length == 0;
+		case OBJ_UPVALUE:
+			return isFalsey(*(((ObjUpvalue *)AS_OBJ(value))->location));
+		// case OBJ_BOUND_METHOD:
+		// case OBJ_CLASS:
+		// case OBJ_CLOSURE:
+		// case OBJ_FUNCTION:
+		// case OBJ_INSTANCE:
+		// case OBJ_NATIVE:
+		// return true;
+		default:
+			return false; 
+		}
+	}
+
+	return true;
 }
 
 // add two strings
@@ -527,6 +548,26 @@ static InterpretResult run()
 			}
 			break;
 		}
+		case OP_ARRAY:
+		{
+			uint8_t length = READ_BYTE();
+			ObjArray *array = newArray();
+			
+			ValueArray values;
+			initValueArray(&values);
+			for (int j = 0; j < length; j++)
+			{
+				writeValueArray(&values, pop());
+			}
+			// reverse items
+			for (int j = length-1; j >= 0; j--)
+			{
+				writeValueArray(&array->array, values.values[j]);
+			}
+			freeValueArray(&values);
+			push(OBJ_VAL(array));
+			break;
+		}
 		case OP_EQUAL:
 		{
 			Value b = pop();
@@ -723,6 +764,16 @@ static InterpretResult run()
 			push(result);
 			frame = &vm.frames[vm.frameCount - 1];
 			break;
+		}
+		case OP_EXIT:
+		{
+			Value retval = pop();
+			if (!IS_NUMBER(retval))
+			{
+				runtimeError("cannot exit from script with non-number value");
+				return INTERPRET_RUNTIME_ERROR;
+			}
+			exit((int)AS_NUMBER(retval));
 		}
 		}
 	}

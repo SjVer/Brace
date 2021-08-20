@@ -1,5 +1,5 @@
-#ifndef clox_table_h
-#define clox_table_h
+#ifndef brace_table_h
+#define brace_table_h
 
 #include "common.h"
 #include "value.h"

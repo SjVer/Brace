@@ -1,5 +1,5 @@
-#ifndef clox_memory_h
-#define clox_memory_h
+#ifndef brace_memory_h
+#define brace_memory_h
 
 #include "common.h"
 #include "object.h"
@@ -29,5 +29,7 @@ void markObject(Obj *object);
 
 void *reallocate(void *pointer, size_t oldSize, size_t newSize);
 void freeObjects();
+char *formatString(const char *format, ...);
+// void freeObject(Obj *object);
 
 #endif
