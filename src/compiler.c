@@ -137,7 +137,8 @@ static void or_(bool canAssign);
 static void dot(bool canAssign);
 static void this_(bool canAssign);
 static void super_(bool canAssign);
-static void b_brace(bool canAssign);
+static void index(bool canAssign);
+static void array(bool canAssign);
 
 static void namedVariable(Token name, bool canAssing);
 
@@ -457,7 +458,7 @@ ParseRule rules[] = {
 	[TOKEN_RIGHT_PAREN] 	= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_LEFT_BRACE] 		= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_RIGHT_BRACE] 	= {NULL, 	NULL,   PREC_NONE},
-	[TOKEN_LEFT_B_BRACE] 	= {b_brace, NULL,   PREC_NONE},
+	[TOKEN_LEFT_B_BRACE] 	= {array, 	index,  PREC_CALL},
 	[TOKEN_RIGHT_B_BRACE] 	= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_COMMA] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_DOT] 			= {NULL, 	dot,   	PREC_CALL},
@@ -1089,7 +1090,7 @@ static void number(bool canAssign)
 }
 
 // compiles an array
-static void b_brace(bool canAssing)
+static void array(bool canAssing)
 {
 	int length = 0;
 	while (!check(TOKEN_RIGHT_B_BRACE) && !check(TOKEN_EOF))
@@ -1102,6 +1103,14 @@ static void b_brace(bool canAssing)
 	consume(TOKEN_RIGHT_B_BRACE, "Expect ']' after array.");
 
 	emitBytes(OP_ARRAY, (uint8_t)length);
+}
+
+// indexes an array
+static void index(bool canAssing)
+{
+	expression();
+	consume(TOKEN_RIGHT_B_BRACE, "Expect ']' after index.");
+	emitByte(OP_INDEX);
 }
 
 // compiles a string

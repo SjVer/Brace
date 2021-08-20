@@ -548,6 +548,24 @@ static InterpretResult run()
 			}
 			break;
 		}
+		case OP_INDEX:
+		{
+			int index = AS_NUMBER(pop());
+			ObjArray *array = AS_ARRAY(pop());
+			
+			if (index < 0)
+				// handle negative indexing
+				index = array->array.count + index;
+
+			if (index < 0 || index > array->array.count)
+			{
+				runtimeError("Invalid index %d of array of length %d", index,	array->array.count);
+				return INTERPRET_RUNTIME_ERROR;
+			}
+
+			push(array->array.values[index]);
+			break;
+		}
 		case OP_ARRAY:
 		{
 			uint8_t length = READ_BYTE();
