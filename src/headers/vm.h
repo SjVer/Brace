@@ -51,7 +51,7 @@ void defineNative(
 bool isFalsey(Value value);
 void initVM();
 void freeVM();
-InterpretResult interpret(const char *source);
+InterpretResult interpret(const char *source, bool repl_mode);
 void push(Value value);
 Value pop();
 

@@ -128,6 +128,7 @@ static void grouping(bool canAssign);
 static void number(bool canAssign);
 static void unary(bool canAssign);
 static void binary(bool canAssign);
+static void postfix(bool canAssign);
 static void call(bool canAssign);
 static void literal(bool canAssign);
 static void string(bool canAssign);
@@ -464,6 +465,7 @@ ParseRule rules[] = {
 	[TOKEN_DOT] 			= {NULL, 	dot,   	PREC_CALL},
 	[TOKEN_MINUS] 			= {unary, 	binary, PREC_TERM},
 	[TOKEN_PLUS] 			= {NULL, 	binary, PREC_TERM},
+	[TOKEN_PLUS_PLUS]		= {NULL,	postfix,PREC_CALL},
 	[TOKEN_SEMICOLON] 		= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_SLASH] 			= {NULL, 	binary, PREC_FACTOR},
 	[TOKEN_STAR] 			= {NULL, 	binary, PREC_FACTOR},
@@ -1221,6 +1223,12 @@ static void binary(bool canAssign)
 	default:
 		return; // Unreachable.
 	}
+}
+
+// parses a postfix operator
+static void postfix(bool canAssign)
+{
+	emitByte(OP_INCREMENT);
 }
 
 // parses a call

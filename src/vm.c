@@ -440,6 +440,10 @@ static InterpretResult run()
 			pop();
 			break;
 		}
+		case OP_DUPLICATE:
+		{
+			push(peek(0));
+		}
 		case OP_GET_LOCAL:
 		{
 			uint8_t slot = READ_BYTE();
@@ -609,10 +613,15 @@ static InterpretResult run()
 			{
 				concatenate();
 			}
-			// else if (IS_STRING(peek(0)) || IS_STRING(peek(1)))
-			// {
-			// 	concatenate_other(IS_STRING(peek(0)));
-			// }
+			else if (IS_ARRAY(peek(0)) && IS_ARRAY(peek(1)))
+			{
+				ObjArray *b = AS_ARRAY(pop());
+				ObjArray *a = AS_ARRAY(pop());
+				for (int i = 0; i < b->array.count; i++)
+					writeValueArray(&a->array, b->array.values[i]);
+				freeValueArray(&b->array);
+				push(OBJ_VAL(a));
+			}
 			else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1)))
 			{
 				double b = AS_NUMBER(pop());
@@ -625,6 +634,10 @@ static InterpretResult run()
 				return INTERPRET_RUNTIME_ERROR;
 			}
 			break;
+		}
+		case OP_INCREMENT:
+		{
+			push(NUMBER_VAL(AS_NUMBER(pop())+1));
 		}
 		case OP_SUBTRACT:
 		{
@@ -804,16 +817,32 @@ static InterpretResult run()
 }
 
 // interpret shit and return its result
-InterpretResult interpret(const char *source)
+InterpretResult interpret(const char *source, bool repl_mode)
 {
 	ObjFunction *function = compile(source);
+
 	if (function == NULL)
 		return INTERPRET_COMPILE_ERROR;
+
+	//disassembleChunk(&function->chunk, "BEFORE");
+
+	//if (repl_mode)
+	//{
+		// duplicate the return value and print before returning
+		// function->chunk.code[-1] = OP_DUPLICATE;
+		// disassembleChunk(&function->chunk, "1");
+		// writeChunk(&function->chunk, OP_PRINT, -1);
+		// disassembleChunk(&function->chunk, "2");
+		// writeChunk(&function->chunk, OP_RETURN, -1);
+	//}
+
+	//disassembleChunk(&function->chunk, "AFTER");
 
 	push(OBJ_VAL(function));
 	ObjClosure *closure = newClosure(function);
 	pop();
 	push(OBJ_VAL(closure));
 	call(closure, 0);
+
 	return run();
 }
