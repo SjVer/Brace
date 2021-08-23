@@ -34,6 +34,8 @@ static Obj *allocateObject(size_t size, ObjType type)
 	return object;
 }
 
+
+
 // allocates and returns a new bound method
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method)
 {
@@ -43,6 +45,8 @@ ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method)
 	return bound;
 }
 
+
+
 // allocates and returns a new class
 ObjClass *newClass(ObjString *name)
 {
@@ -51,6 +55,8 @@ ObjClass *newClass(ObjString *name)
 	initTable(&klass->methods);
 	return klass;
 }
+
+
 
 // allocates and returns a new closure
 ObjClosure *newClosure(ObjFunction *function)
@@ -67,6 +73,8 @@ ObjClosure *newClosure(ObjFunction *function)
 	closure->upvalueCount = function->upvalueCount;
 	return closure;
 }
+
+
 
 // allocates and returns a new native function
 ObjNative *newNative(NativeFn function, int arity, const char *name)
@@ -89,6 +97,8 @@ ObjFunction *newFunction()
 	return function;
 }
 
+
+
 ObjInstance *newInstance(ObjClass *klass)
 {
 	ObjInstance *instance = ALLOCATE_OBJ(ObjInstance, OBJ_INSTANCE);
@@ -96,6 +106,8 @@ ObjInstance *newInstance(ObjClass *klass)
 	initTable(&instance->fields);
 	return instance;
 }
+
+
 
 ObjUpvalue *newUpvalue(Value *slot)
 {
@@ -105,6 +117,8 @@ ObjUpvalue *newUpvalue(Value *slot)
 	upvalue->next = NULL;
 	return upvalue;
 }
+
+
 
 // ObjArray *newArray(Value *items, int length)
 ObjArray *newArray()
@@ -118,6 +132,8 @@ ObjArray *newArray()
 
 	return array;
 }
+
+
 
 // allocates a ObjString
 static ObjString *allocateString(char *chars, int length, uint32_t hash)
@@ -176,6 +192,8 @@ ObjString *copyString(const char *chars, int length)
 	return allocateString(heapChars, length, hash);
 }
 
+
+
 static char *functionToString(ObjFunction *function)
 // static void printFunction(ObjFunction *function)
 {
@@ -198,6 +216,8 @@ static char *arrayToString(ObjArray *array)
 	}
 	return formatString("%s]", ret);
 }
+
+
 
 char *objectToString(Value value)
 {

@@ -20,13 +20,17 @@ void writeValueArray(ValueArray *array, Value value)
         // array needs to grow first
         int oldCapacity = array->capacity;
         array->capacity = GROW_CAPACITY(oldCapacity);
-        array->values = GROW_ARRAY(Value, array->values,
-                                   oldCapacity, array->capacity);
+        array->values = GROW_ARRAY(Value, array->values, oldCapacity, array->capacity);
     }
 
     // add value to array and increment count
     array->values[array->count] = value;
     array->count++;
+}
+
+void setValueArray(ValueArray *array, int index, Value value)
+{
+    array->values[index] = value;
 }
 
 void freeValueArray(ValueArray *array)

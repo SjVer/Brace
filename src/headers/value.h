@@ -55,6 +55,7 @@ typedef struct
 bool valuesEqual(Value a, Value b);
 void initValueArray(ValueArray *array);
 void writeValueArray(ValueArray *array, Value value);
+void setValueArray(ValueArray *array, int index, Value value);
 void freeValueArray(ValueArray *array);
 char *valueToString(Value value);
 void printValue(Value value);

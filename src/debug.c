@@ -97,10 +97,12 @@ int disassembleInstruction(Chunk *chunk, int offset)
         return constantInstruction("OP_SET_PROPERTY", chunk, offset);
     case OP_GET_SUPER:
         return constantInstruction("OP_GET_SUPER", chunk, offset);
+    case OP_GET_INDEX:
+        return simpleInstruction("OP_GET_INDEX", offset);
+    case OP_SET_INDEX:
+        return simpleInstruction("OP_SET_INDEX", offset);
     case OP_ARRAY:
         return byteInstruction("OP_ARRAY", chunk, offset);
-    case OP_INDEX:
-        return simpleInstruction("OP_INDEX", offset);
     case OP_EQUAL:
         return simpleInstruction("OP_EQUAL", offset);
     case OP_GREATER:
@@ -113,6 +115,8 @@ int disassembleInstruction(Chunk *chunk, int offset)
 	return simpleInstruction("OP_INCREMENT", offset);
     case OP_SUBTRACT:
         return simpleInstruction("OP_SUBTRACT", offset);
+    case OP_DECREMENT:
+	return simpleInstruction("OP_DECREMENT", offset);
     case OP_MULTIPLY:
         return simpleInstruction("OP_MULTIPLY", offset);
     case OP_DIVIDE:

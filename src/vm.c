@@ -173,7 +173,8 @@ static bool callValue(Value callee, int argCount)
 			// NativeFn native = AS_NATIVE(callee);
 			ObjNative *native = AS_NATIVE(callee);
 
-			if (argCount != native->arity)
+			// arity -1 indicates that the arity is handled by the native
+			if (native->arity != -1 && argCount != native->arity)
 			{
 				runtimeError("Expected %d arguments but got %d.", native->arity, argCount);
 				return false;
@@ -404,7 +405,7 @@ static InterpretResult run()
 			printValue(*slot);
 			printf("]");
 		}
-		printf("\nINSTRUCT: ");
+		printf("\nINSTRUCT %d: ", (int)(frame->ip - frame->closure->function->chunk.code));
 		disassembleInstruction(&frame->closure->function->chunk,
 							   (int)(frame->ip - frame->closure->function->chunk.code));
 		// printf(">>> ");
@@ -552,7 +553,7 @@ static InterpretResult run()
 			}
 			break;
 		}
-		case OP_INDEX:
+		case OP_GET_INDEX:
 		{
 			int index = AS_NUMBER(pop());
 			ObjArray *array = AS_ARRAY(pop());
@@ -568,6 +569,26 @@ static InterpretResult run()
 			}
 
 			push(array->array.values[index]);
+			break;
+		}
+		case OP_SET_INDEX:
+		{
+			Value newvalue = pop();
+			int index = AS_NUMBER(pop());
+			ObjArray *array = AS_ARRAY(pop());
+
+			if (index < 0)
+				// handle negative indexing
+				index = array->array.count + index;
+
+			if (index < 0 || index > array->array.count)
+			{
+				runtimeError("Invalid index %d of array of length %d", index, array->array.count);
+				return INTERPRET_RUNTIME_ERROR;
+			}
+
+			setValueArray(&array->array, index, newvalue);
+			push(OBJ_VAL(array));
 			break;
 		}
 		case OP_ARRAY:
@@ -637,11 +658,27 @@ static InterpretResult run()
 		}
 		case OP_INCREMENT:
 		{
+			if(!IS_NUMBER(peek(0)))
+			{
+				runtimeError("Cannot increment non-numerical value '%s'.", valueToString(peek(0)));
+				return INTERPRET_RUNTIME_ERROR;
+			}
 			push(NUMBER_VAL(AS_NUMBER(pop())+1));
+			break;
 		}
 		case OP_SUBTRACT:
 		{
 			BINARY_OP(NUMBER_VAL, -);
+			break;
+		}
+		case OP_DECREMENT:
+		{
+			if (!IS_NUMBER(peek(0)))
+			{
+				runtimeError("Cannot decrement non-numerical value '%s'.", valueToString(peek(0)));
+				return INTERPRET_RUNTIME_ERROR;
+			}
+			push(NUMBER_VAL(AS_NUMBER(pop()) - 1));
 			break;
 		}
 		case OP_MULTIPLY:
@@ -820,29 +857,13 @@ static InterpretResult run()
 InterpretResult interpret(const char *source, bool repl_mode)
 {
 	ObjFunction *function = compile(source);
-
 	if (function == NULL)
 		return INTERPRET_COMPILE_ERROR;
-
-	//disassembleChunk(&function->chunk, "BEFORE");
-
-	//if (repl_mode)
-	//{
-		// duplicate the return value and print before returning
-		// function->chunk.code[-1] = OP_DUPLICATE;
-		// disassembleChunk(&function->chunk, "1");
-		// writeChunk(&function->chunk, OP_PRINT, -1);
-		// disassembleChunk(&function->chunk, "2");
-		// writeChunk(&function->chunk, OP_RETURN, -1);
-	//}
-
-	//disassembleChunk(&function->chunk, "AFTER");
 
 	push(OBJ_VAL(function));
 	ObjClosure *closure = newClosure(function);
 	pop();
 	push(OBJ_VAL(closure));
 	call(closure, 0);
-
 	return run();
 }

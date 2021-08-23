@@ -141,7 +141,7 @@ static void super_(bool canAssign);
 static void index(bool canAssign);
 static void array(bool canAssign);
 
-static void namedVariable(Token name, bool canAssing);
+static void namedVariable(Token name, bool canAssign);
 
 // -------- error stuff --------
 
@@ -455,6 +455,7 @@ static Token syntheticToken(const char *text)
 
 // rules for parsing any token
 ParseRule rules[] = {
+	// token				// prefix,  infix,  precedence
 	[TOKEN_LEFT_PAREN]    	= {grouping,call,   PREC_CALL},
 	[TOKEN_RIGHT_PAREN] 	= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_LEFT_BRACE] 		= {NULL, 	NULL,   PREC_NONE},
@@ -464,6 +465,7 @@ ParseRule rules[] = {
 	[TOKEN_COMMA] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_DOT] 			= {NULL, 	dot,   	PREC_CALL},
 	[TOKEN_MINUS] 			= {unary, 	binary, PREC_TERM},
+	[TOKEN_MINUS_MINUS] 	= {NULL, 	postfix,PREC_CALL},
 	[TOKEN_PLUS] 			= {NULL, 	binary, PREC_TERM},
 	[TOKEN_PLUS_PLUS]		= {NULL,	postfix,PREC_CALL},
 	[TOKEN_SEMICOLON] 		= {NULL, 	NULL,   PREC_NONE},
@@ -1092,7 +1094,7 @@ static void number(bool canAssign)
 }
 
 // compiles an array
-static void array(bool canAssing)
+static void array(bool canAssign)
 {
 	int length = 0;
 	while (!check(TOKEN_RIGHT_B_BRACE) && !check(TOKEN_EOF))
@@ -1108,11 +1110,20 @@ static void array(bool canAssing)
 }
 
 // indexes an array
-static void index(bool canAssing)
+static void index(bool canAssign)
 {
 	expression();
 	consume(TOKEN_RIGHT_B_BRACE, "Expect ']' after index.");
-	emitByte(OP_INDEX);
+
+	if (canAssign && match(TOKEN_EQUAL))
+	{
+		expression();
+		emitByte(OP_SET_INDEX);
+	}
+	else
+	{
+		emitByte(OP_GET_INDEX);
+	}
 }
 
 // compiles a string
@@ -1228,7 +1239,20 @@ static void binary(bool canAssign)
 // parses a postfix operator
 static void postfix(bool canAssign)
 {
-	emitByte(OP_INCREMENT);
+	printf("NOT YET IMPLEMENTED PROPERLY!!!!!");
+
+	// TokenType operatorType = parser.previous.type;
+	switch (parser.previous.type)
+	{
+	case TOKEN_PLUS_PLUS:
+		emitByte(OP_INCREMENT);
+		break;
+	case TOKEN_MINUS_MINUS:
+		emitByte(OP_DECREMENT);
+		break;
+	default:
+		return;
+	}
 }
 
 // parses a call

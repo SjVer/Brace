@@ -70,6 +70,59 @@ static Value arrayNative(int argCount, Value *args)
 
     return OBJ_VAL(array);
 }
+
+// yoinked from https://github.com/valkarias
+static Value inputNative(int argCount, Value *args)
+{
+    if (argCount != 0 && argCount != 1)
+        return nativeRuntimeError("Expect 0 or 1 arguments.");
+
+    if (argCount != 0)
+    {
+        if (!checkArg(args[0], VAL_OBJ, OBJ_STRING))
+            return nativeRuntimeError("Expected string argument.");
+
+        printf("%s", AS_CSTRING(args[0]));
+    }
+
+    uint64_t currentSize = 128;
+    char *line = ALLOCATE(char, currentSize);
+
+    if (line == NULL)
+    {
+        runtimeError("A Memory error occured on input()!?");
+        return NIL_VAL;
+    }
+
+    int c = EOF;
+    uint64_t length = 0;
+    while ((c = getchar()) != '\n' && c != EOF)
+    {
+        line[length++] = (char)c;
+
+        if (length + 1 == currentSize)
+        {
+            int oldSize = currentSize;
+            currentSize = GROW_CAPACITY(currentSize);
+            line = GROW_ARRAY(char, line, oldSize, currentSize);
+
+            if (line == NULL)
+            {
+                printf("Unable to allocate more memory\n");
+                exit(71);
+            }
+        }
+    }
+
+    if (length != currentSize)
+    {
+        line = GROW_ARRAY(char, line, currentSize, length + 1);
+    }
+
+    line[length] = '\0';
+
+    return OBJ_VAL(takeString(line, length));
+}
 // ---------------------------
 
 void defineNatives()
@@ -80,4 +133,5 @@ void defineNatives()
     defineNative("str",   strNative,   1);
     defineNative("bool",  boolNative,  1);
     defineNative("array", arrayNative, 1);
+    defineNative("input", inputNative, -1);
 }
