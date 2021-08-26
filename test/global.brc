@@ -1,6 +1,6 @@
-fun showVariable() {
-  print global;
+Fun showVariable [] {
+  Print global;
 }
 
-var global = "after";
+Var global = "after";
 showVariable();

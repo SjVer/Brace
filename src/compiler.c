@@ -25,6 +25,7 @@ typedef enum
 {
 	PREC_NONE,
 	PREC_ASSIGNMENT, // =
+	PREC_TERNARY,	 // ? :
 	PREC_OR,		 // or
 	PREC_AND,		 // and
 	PREC_EQUALITY,	 // == !=
@@ -60,6 +61,7 @@ typedef struct
 
 typedef enum
 {
+	TYPE_BLOCK,
 	TYPE_FUNCTION,
 	TYPE_INITIALIZER,
 	TYPE_METHOD,
@@ -121,13 +123,16 @@ static void returnStatement();
 static void exitStatement();
 static void ifStatement();
 static void forStatement();
+static void foreachStatement();
 static void whileStatement();
 static void declaration();
 
+static void blockVal(bool canAssing);
 static void grouping(bool canAssign);
 static void number(bool canAssign);
 static void unary(bool canAssign);
 static void binary(bool canAssign);
+static void ternary(bool canAssign);
 static void postfix(bool canAssign);
 static void call(bool canAssign);
 static void literal(bool canAssign);
@@ -308,7 +313,7 @@ static void emitReturn()
 	}
 	else
 	{
-		emitByte(OP_NIL);
+		emitByte(OP_NULL);
 	}
 
 	emitByte(OP_RETURN);
@@ -458,7 +463,7 @@ ParseRule rules[] = {
 	// token				// prefix,  infix,  precedence
 	[TOKEN_LEFT_PAREN]    	= {grouping,call,   PREC_CALL},
 	[TOKEN_RIGHT_PAREN] 	= {NULL, 	NULL,   PREC_NONE},
-	[TOKEN_LEFT_BRACE] 		= {NULL, 	NULL,   PREC_NONE},
+	[TOKEN_LEFT_BRACE] 		= {blockVal,NULL,   PREC_NONE},
 	[TOKEN_RIGHT_BRACE] 	= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_LEFT_B_BRACE] 	= {array, 	index,  PREC_CALL},
 	[TOKEN_RIGHT_B_BRACE] 	= {NULL, 	NULL,   PREC_NONE},
@@ -468,6 +473,8 @@ ParseRule rules[] = {
 	[TOKEN_MINUS_MINUS] 	= {NULL, 	postfix,PREC_CALL},
 	[TOKEN_PLUS] 			= {NULL, 	binary, PREC_TERM},
 	[TOKEN_PLUS_PLUS]		= {NULL,	postfix,PREC_CALL},
+	[TOKEN_QUESTION] 		= {NULL, 	ternary,PREC_TERNARY},
+	[TOKEN_COLON] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_SEMICOLON] 		= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_SLASH] 			= {NULL, 	binary, PREC_FACTOR},
 	[TOKEN_STAR] 			= {NULL, 	binary, PREC_FACTOR},
@@ -487,9 +494,10 @@ ParseRule rules[] = {
 	[TOKEN_ELSE] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_FALSE] 			= {literal,	NULL,   PREC_NONE},
 	[TOKEN_FOR] 			= {NULL, 	NULL,   PREC_NONE},
+	[TOKEN_FOREACH] 		= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_FUN] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_IF] 				= {NULL, 	NULL,   PREC_NONE},
-	[TOKEN_NIL] 			= {literal,	NULL,   PREC_NONE},
+	[TOKEN_NULL] 			= {literal,	NULL,   PREC_NONE},
 	[TOKEN_OR] 				= {NULL, 	or_, 	PREC_OR},
 	[TOKEN_PRINT] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_EXIT] 			= {NULL, 	NULL,   PREC_NONE},
@@ -651,6 +659,23 @@ static void dot(bool canAssign)
 		expression();
 		emitBytes(OP_SET_PROPERTY, name);
 	}
+	// increment
+	else if (canAssign && match(TOKEN_PLUS_PLUS))
+	{
+		emitBytes(OP_DUPLICATE, 0);
+		emitBytes(OP_GET_PROPERTY, name);
+		emitByte(OP_INCREMENT);
+		emitBytes(OP_SET_PROPERTY, name);
+	}
+	// decrement
+	else if (canAssign && match(TOKEN_MINUS_MINUS))
+	{
+		emitBytes(OP_DUPLICATE, 0);
+		emitBytes(OP_GET_PROPERTY, name);
+		emitByte(OP_DECREMENT);
+		emitBytes(OP_SET_PROPERTY, name);
+	}
+	// method
 	else if (match(TOKEN_LEFT_PAREN))
 	{
 		uint8_t argCount = argumentList();
@@ -732,29 +757,36 @@ static void function(FunctionType type)
 	initCompiler(&compiler, type);
 	beginScope();
 
-	consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
-
-	// parameters
-	if (!check(TOKEN_RIGHT_PAREN))
+	if (type != TYPE_BLOCK)
 	{
-		do
+		consume(TOKEN_LEFT_B_BRACE, "Expect '[' after function name.");
+
+		// parameters
+		if (!check(TOKEN_RIGHT_B_BRACE))
 		{
-			current->function->arity++;
-			if (current->function->arity > 255)
+			do
 			{
-				errorAtCurrent("Can't have more than 255 parameters.");
-			}
-			uint8_t constant = parseVariable("Expect parameter name.");
-			defineVariable(constant);
-		} while (match(TOKEN_COMMA));
+				current->function->arity++;
+				if (current->function->arity > 255)
+				{
+					errorAtCurrent("Can't have more than 255 parameters.");
+				}
+				uint8_t constant = parseVariable("Expect parameter name.");
+				defineVariable(constant);
+			} while (match(TOKEN_COMMA));
+		}
+		consume(TOKEN_RIGHT_B_BRACE, "Expect ']' after parameters.");
+
+		// body
+		consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
 	}
-	consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
-	
-	// body
-	consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
 	block();
 
 	ObjFunction *function = endCompiler();
+
+	if (type == TYPE_BLOCK)
+		function->name = copyString("\b\b\b\bBlck", 8);
+
 	emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
 
 	// emit the upvalues as well
@@ -816,6 +848,9 @@ static void statement()
 	else if (match(TOKEN_FOR))
     	forStatement();
 
+	else if (match(TOKEN_FOREACH))
+    	foreachStatement();
+
 	else if (match(TOKEN_IF))
 		ifStatement();
 
@@ -844,16 +879,28 @@ static void varDeclaration()
 	uint8_t global = parseVariable("Expect variable name.");
 
 	if (match(TOKEN_EQUAL))
-	{
 		expression();
-	}
 	else
-	{
-		emitByte(OP_NIL);
-	}
+		emitByte(OP_NULL);
+	
 	consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
 
 	defineVariable(global);
+}
+
+// compiles a field declaration
+static void fieldDeclaration()
+{
+	uint8_t field = parseVariable("Expect variable name.");
+
+	if (match(TOKEN_EQUAL))
+		expression();
+	else
+		emitByte(OP_NULL);
+
+	consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+
+	emitBytes(OP_DEFINE_FIELD, field);
 }
 
 // compiles a class declaration
@@ -904,7 +951,10 @@ static void classDeclaration()
 	
 	while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF))
 	{
-		method();
+		if (match(TOKEN_VAR))
+			fieldDeclaration();
+		else
+			method();
 	}
 
 	consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
@@ -938,8 +988,10 @@ static void expressionStatement()
 // compiles a print statement
 static void printStatement()
 {
+	// consume(TOKEN_LEFT_PAREN, "Expect '(' after 'Print'.");
 	expression();
-	consume(TOKEN_SEMICOLON, "Expect ';' after value.");
+	// consume(TOKEN_RIGHT_PAREN, "Expect ')' after value.");
+	consume(TOKEN_SEMICOLON, "Expect ';' after ')'.");
 	emitByte(OP_PRINT);
 }
 
@@ -1017,13 +1069,9 @@ static void forStatement()
 		// No initializer.
 	}
 	else if (match(TOKEN_VAR))
-	{
 		varDeclaration();
-	}
 	else
-	{
 		expressionStatement();
-	}
 
 	int loopStart = currentChunk()->count;
 
@@ -1061,6 +1109,55 @@ static void forStatement()
 	endScope();
 }
 
+// compiles a foreach statement
+static void foreachStatement()
+{
+	beginScope();
+	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'Foreach'.");
+	
+	// item
+	uint8_t item = parseVariable("Expect identifier after '('.");
+	emitByte(OP_NULL);
+	emitBytes(OP_SET_LOCAL, item); // make the item variable exist
+	markInitialized();
+
+	consume(TOKEN_COLON, "Expect ':' after identifier.");
+	// array
+	expression();
+	consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
+
+	// we push the length of the array onto the stack to keep track of which
+	// item we currently have and when to stop
+	emitBytes(OP_DUPLICATE, 0);
+	emitByte(OP_ARRAY_LENGTH);
+	// stack: [..., item, array, lenght]
+	
+	int loopStart = currentChunk()->count;
+
+	// jump if length reached 0
+	int exitJump = emitJump(OP_JUMP_IF_FALSE);
+
+	// set item variable to current item
+	emitBytes(OP_DUPLICATE, 1);
+	emitBytes(OP_DUPLICATE, 1);
+	// stack: [..., item, array, length, array, length]
+	emitByte(OP_NEGATE);
+	// stack: [..., item, array, length, array, index]
+	emitByte(OP_GET_INDEX);
+	// stack: [..., item, array, length, value]
+	emitBytes(OP_SET_LOCAL, item+1);
+	// stack: [..., new_item, array, length]
+
+	// block
+	statement();
+	emitByte(OP_POP);
+
+	emitByte(OP_DECREMENT); // decrement the length value
+	emitLoop(loopStart);
+
+	patchJump(exitJump);
+}
+
 // compiles a while statement
 static void whileStatement()
 {
@@ -1077,6 +1174,13 @@ static void whileStatement()
 
 	patchJump(exitJump);
 	emitByte(OP_POP);
+}
+
+// compiles a codeblock value
+static void blockVal(bool canAssing)
+{
+	error("BLOCKS NOT YET IMPLEMENTED");
+	function(TYPE_BLOCK);
 }
 
 // compile a grouping
@@ -1120,6 +1224,23 @@ static void index(bool canAssign)
 		expression();
 		emitByte(OP_SET_INDEX);
 	}
+	else if (canAssign && match(TOKEN_PLUS_PLUS))
+	{
+		// stack: [array, index]
+		emitBytes(OP_DUPLICATE, (uint8_t)1);
+		emitBytes(OP_DUPLICATE, (uint8_t)1);
+		// stack: [array, index, array, index]
+		emitBytes(OP_GET_INDEX, OP_INCREMENT);
+		// stack: [array, index, newvalue]
+		emitByte(OP_SET_INDEX);
+	}
+	else if (canAssign && match(TOKEN_MINUS_MINUS))
+	{
+		emitBytes(OP_DUPLICATE, (uint8_t)1);
+		emitBytes(OP_DUPLICATE, (uint8_t)1);
+		emitBytes(OP_GET_INDEX, OP_DECREMENT);
+		emitByte(OP_SET_INDEX);
+	}
 	else
 	{
 		emitByte(OP_GET_INDEX);
@@ -1153,11 +1274,27 @@ static void namedVariable(Token name, bool canAssign)
 		setOp = OP_SET_GLOBAL;
 	}
 
+	// assigning
 	if (canAssign && match(TOKEN_EQUAL))
 	{
 		expression();
 		emitBytes(setOp, (uint8_t)arg);
 	}
+	// incrementing
+	else if (canAssign && match(TOKEN_PLUS_PLUS))
+	{
+		namedVariable(name, false);
+		emitByte(OP_INCREMENT);
+		emitBytes(setOp, (uint8_t)arg);
+	}
+	// decrementing
+	else if (canAssign && match(TOKEN_MINUS_MINUS))
+	{
+		namedVariable(name, false);
+		emitByte(OP_DECREMENT);
+		emitBytes(setOp, (uint8_t)arg);
+	}
+	// just declaration
 	else
 	{
 		emitBytes(getOp, (uint8_t)arg);
@@ -1236,11 +1373,43 @@ static void binary(bool canAssign)
 	}
 }
 
+// parses a ternary expression
+static void ternary(bool canAssign)
+{
+	// previous: '?'
+	ParseRule *rule = getRule(parser.previous.type);
+	parsePrecedence((Precedence)(rule->precedence + 1));
+	consume(TOKEN_COLON, "Expect ':' after first value in ternary operator.");
+	parsePrecedence((Precedence)(rule->precedence + 1));
+
+	/*
+	example bytecode:
+		
+	before '?':
+		stack: [...]
+		OP_CONSTANT		'condition'
+		
+	after '?':
+		stack: [..., condition]
+		OP_CONSTANT		'truevalue'
+	
+	after ':':
+		stack: [..., condition, truevalue]
+		OP_CONSTANT		'falsevalue'
+
+		stack: [..., condition, truevalue, falsevalue]
+		OP_TERNARY
+	
+		stack: [..., chosenvalue]
+		OP_SOMETHING
+	*/
+
+	emitByte(OP_TERNARY);
+}
+
 // parses a postfix operator
 static void postfix(bool canAssign)
 {
-	printf("NOT YET IMPLEMENTED PROPERLY!!!!!");
-
 	// TokenType operatorType = parser.previous.type;
 	switch (parser.previous.type)
 	{
@@ -1270,8 +1439,8 @@ static void literal(bool canAssign)
 	case TOKEN_FALSE:
 		emitByte(OP_FALSE);
 		break;
-	case TOKEN_NIL:
-		emitByte(OP_NIL);
+	case TOKEN_NULL:
+		emitByte(OP_NULL);
 		break;
 	case TOKEN_TRUE:
 		emitByte(OP_TRUE);

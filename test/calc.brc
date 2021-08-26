@@ -1,6 +1,6 @@
-fun echo(n) {
-  print n;
-  return n;
+Fun echo [n] {
+	Print n;
+	Return n;
 }
 
-print echo(echo(1) + echo(2)) + echo(echo(4) + echo(5));
+Print echo(echo(1) + echo(2)) + echo(echo(4) + echo(5));

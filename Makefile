@@ -56,6 +56,7 @@ all: $(APP)
 $(APP): $(OBJ) | makedirs
 	@printf "[final] compiling final product $(notdir $@)..."
 	@$(CC) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+	@cp $(APP) "."
 	@printf "\b\b done!\n"
 
 # Creates the dependecy rules

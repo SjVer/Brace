@@ -80,64 +80,51 @@ static TokenType identifierType()
 {
 	switch (scanner.start[0])
 	{
-	case 'a':
-		return checkKeyword(1, 2, "nd", TOKEN_AND);
-	case 'c':
-		return checkKeyword(1, 4, "lass", TOKEN_CLASS);
-	case 'e':
-		// return checkKeyword(1, 3, "lse", TOKEN_ELSE);
+	case 'C': return checkKeyword(1, 2, "ls", TOKEN_CLASS);
+	case 'E': // 'Exit' or 'Else'
 		if (scanner.current - scanner.start > 1)
 		{
 			switch (scanner.start[1])
 			{
-				case 'x':
-					return checkKeyword(2, 2, "it", TOKEN_EXIT);
-				case 'l':
-					return checkKeyword(2, 2, "se", TOKEN_ELSE);
+				case 'x': return checkKeyword(2, 2, "it", TOKEN_EXIT);
+				case 'l': return checkKeyword(2, 2, "se", TOKEN_ELSE);
 			}
 		}
-	case 'f':
+	case 'f': return checkKeyword(1, 4, "alse", TOKEN_FALSE);
+	case 'F': // 'Fun' or 'For' or 'Foreach'
 		if (scanner.current - scanner.start > 1)
 		{
 			switch (scanner.start[1])
 			{
-			case 'a':
-				return checkKeyword(2, 3, "lse", TOKEN_FALSE);
-			case 'o':
-				return checkKeyword(2, 1, "r", TOKEN_FOR);
-			case 'u':
-				return checkKeyword(2, 1, "n", TOKEN_FUN);
+			// case 'o': return checkKeyword(2, 1, "r", TOKEN_FOR);
+			case 'o': // 'For' or 'Foreach'
+				if (scanner.current - scanner.start > 2 && scanner.start[2] == 'r')
+				{
+					if (scanner.current - scanner.start > 3)
+						return checkKeyword(3, 4, "each", TOKEN_FOREACH);
+					else
+						return checkKeyword(3, 0, "", TOKEN_FOR);
+				}
+
+			case 'u': return checkKeyword(2, 1, "n", TOKEN_FUN);
 			}
 		}
-		break;
-	case 'i':
-		return checkKeyword(1, 1, "f", TOKEN_IF);
-	case 'n':
-		return checkKeyword(1, 2, "il", TOKEN_NIL);
-	case 'o':
-		return checkKeyword(1, 1, "r", TOKEN_OR);
-	case 'p':
-		return checkKeyword(1, 4, "rint", TOKEN_PRINT);
-	case 'r':
-		return checkKeyword(1, 5, "eturn", TOKEN_RETURN);
-	case 's':
-		return checkKeyword(1, 4, "uper", TOKEN_SUPER);
-	case 't':
+	case 'I': return checkKeyword(1, 1, "f", TOKEN_IF);
+	case 'n': return checkKeyword(1, 3, "ull", TOKEN_NULL);
+	case 'P': return checkKeyword(1, 4, "rint", TOKEN_PRINT);
+	case 'R': return checkKeyword(1, 5, "eturn", TOKEN_RETURN);
+	case 's': return checkKeyword(1, 4, "uper", TOKEN_SUPER);
+	case 't': // 'this' or 'true'
 		if (scanner.current - scanner.start > 1)
 		{
 			switch (scanner.start[1])
 			{
-			case 'h':
-				return checkKeyword(2, 2, "is", TOKEN_THIS);
-			case 'r':
-				return checkKeyword(2, 2, "ue", TOKEN_TRUE);
+			case 'h': return checkKeyword(2, 2, "is", TOKEN_THIS);
+			case 'r': return checkKeyword(2, 2, "ue", TOKEN_TRUE);
 			}
 		}
-		break;
-	case 'v':
-		return checkKeyword(1, 2, "ar", TOKEN_VAR);
-	case 'w':
-		return checkKeyword(1, 4, "hile", TOKEN_WHILE);
+	case 'V': return checkKeyword(1, 2, "ar", TOKEN_VAR);
+	case 'W': return checkKeyword(1, 4, "hile", TOKEN_WHILE);
 	}
 	return TOKEN_IDENTIFIER;
 }
@@ -220,19 +207,41 @@ static void skipWhitespace()
 			scanner.line++;
 			advance();
 			break;
-		// comment maybe
-		case '/':
-			if (peekNext() == '/')
+		case '#':
+			if (peekNext() == '*')
 			{
-				// A comment goes until the end of the line.
-				while (peek() != '\n' && !isAtEnd())
+				// while (peek() != '*' && peekNext() != '#' && !isAtEnd())
+				for (;;)
+				{
+					if (peek() == '*' && peekNext() == '#')
+					{
+						advance();
+						advance();
+						break;
+					}
+					else if (isAtEnd()) break;
+					else if (peek() == '\n') scanner.line++;
 					advance();
+				}
 			}
 			else
 			{
-				return;
+				while (peek() != '\n' && !isAtEnd())
+					advance();
 			}
 			break;
+		// case '/':
+		// 	if (peekNext() == '/')
+		// 	{
+		// 		// A comment goes until the end of the line.
+		// 		while (peek() != '\n' && !isAtEnd())
+		// 			advance();
+		// 	}
+		// 	else
+		// 	{
+		// 		return;
+		// 	}
+		// 	break;
 		default:
 			return;
 		}
@@ -260,48 +269,36 @@ Token scanToken()
 	switch (c)
 	{
 	// single-character
-	case '(':
-		return makeToken(TOKEN_LEFT_PAREN);
-	case ')':
-		return makeToken(TOKEN_RIGHT_PAREN);
-	case '{':
-		return makeToken(TOKEN_LEFT_BRACE);
-	case '}':
-		return makeToken(TOKEN_RIGHT_BRACE);
-	case '[':
-		return makeToken(TOKEN_LEFT_B_BRACE);
-	case ']':
-		return makeToken(TOKEN_RIGHT_B_BRACE);
-	case ';':
-		return makeToken(TOKEN_SEMICOLON);
-	case ',':
-		return makeToken(TOKEN_COMMA);
-	case '.':
-		return makeToken(TOKEN_DOT);
-	case '-':
-		return makeToken(TOKEN_MINUS);
-	//case '+':
-	//	return makeToken(TOKEN_PLUS);
-	case '/':
-		return makeToken(TOKEN_SLASH);
-	case '*':
-		return makeToken(TOKEN_STAR);
+	// case '\n': return makeToken(TOKEN_NEWLINE);
+
+	case '(': return makeToken(TOKEN_LEFT_PAREN);
+	case ')': return makeToken(TOKEN_RIGHT_PAREN);
+	case '{': return makeToken(TOKEN_LEFT_BRACE);
+	case '}': return makeToken(TOKEN_RIGHT_BRACE);
+	case '[': return makeToken(TOKEN_LEFT_B_BRACE);
+	case ']': return makeToken(TOKEN_RIGHT_B_BRACE);
+	case '?': return makeToken(TOKEN_QUESTION);
+	case ':': return makeToken(TOKEN_COLON);
+	case ';': return makeToken(TOKEN_SEMICOLON);
+	case ',': return makeToken(TOKEN_COMMA);
+	case '.': return makeToken(TOKEN_DOT);
+	case '/': return makeToken(TOKEN_SLASH);
+	case '*': return makeToken(TOKEN_STAR);
 
 	// two-character
-	case '+':
-		return makeToken(match('+') ? TOKEN_PLUS_PLUS : TOKEN_PLUS);
-	case '!':
-		return makeToken(match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
-	case '=':
-		return makeToken(match('=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
-	case '<':
-		return makeToken(match('=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);
-	case '>':
-		return makeToken(match('=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER);
+	// case '+': return makeToken(match('+') ? TOKEN_PLUS_PLUS : TOKEN_PLUS);
+	case '+': return makeToken(match('+') ? TOKEN_PLUS_PLUS     : match('=') ? TOKEN_PLUS_EQUAL  : TOKEN_PLUS);
+	case '-': return makeToken(match('-') ? TOKEN_MINUS_MINUS   : match('=') ? TOKEN_MINUS_EQUAL : TOKEN_MINUS);
+	case '!': return makeToken(match('=') ? TOKEN_BANG_EQUAL    : TOKEN_BANG);
+	case '=': return makeToken(match('=') ? TOKEN_EQUAL_EQUAL   : TOKEN_EQUAL);
+	case '<': return makeToken(match('=') ? TOKEN_LESS_EQUAL    : TOKEN_LESS);
+	case '>': return makeToken(match('=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER);
+	
+	case '|': return match('|') ? makeToken(TOKEN_OR) : errorToken("Expected '|' after '|'.");
+	case '&': return match('&') ? makeToken(TOKEN_AND) : errorToken("Expected '&' after '&'.");
 
 	// literals
-	case '"':
-		return string();
+	case '"': return string();
 	}
 
 	return errorToken("Unexpected character.");

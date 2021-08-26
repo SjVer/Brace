@@ -152,6 +152,10 @@ static bool callValue(Value callee, int argCount)
 			ObjClass *klass = AS_CLASS(callee);
 			vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
 
+			// set fields
+			ObjInstance *instance = AS_INSTANCE(vm.stackTop[-argCount - 1]);
+			tableAddAll(&klass->fields, &instance->fields);
+
 			Value initializer;
 			if (tableGet(&klass->methods, vm.initString, &initializer))
 			{
@@ -306,11 +310,11 @@ static void defineMethod(ObjString *name)
 // check wether the given value returns to false
 bool isFalsey(Value value)
 {
-	// return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
-	if (IS_NIL(value)) return false;
+	// return IS_NULL(value) || (IS_BOOL(value) && !AS_BOOL(value));
+	if (IS_NULL(value)) return true;
 	
 	else if (IS_BOOL(value))
-		return AS_BOOL(value);
+		return !AS_BOOL(value);
 	
 	else if (IS_NUMBER(value))
 		return AS_NUMBER(value) == 0;
@@ -421,9 +425,9 @@ static InterpretResult run()
 			push(constant);
 			break;
 		}
-		case OP_NIL:
+		case OP_NULL:
 		{
-			push(NIL_VAL);
+			push(NULL_VAL);
 			break;
 		}
 		case OP_TRUE:
@@ -443,7 +447,24 @@ static InterpretResult run()
 		}
 		case OP_DUPLICATE:
 		{
-			push(peek(0));
+			push(peek(READ_BYTE()));
+			break;
+		}
+		case OP_TERNARY:
+		{
+			// stack: [..., condition, truevalue, falsevalue]
+			Value falseValue = pop();
+			Value trueValue = pop();
+			Value condition = pop();
+
+			// printf("condition: "); printValue(condition);
+			// printf("\n  if true: "); printValue(trueValue);
+			// printf("\n     else: "); printValue(falseValue);
+			// printf("\nis true? %s", !isFalsey(condition) ? "yes" : "no");
+			// printf("\n");
+
+			push(!isFalsey(condition) ? trueValue : falseValue);
+			break;
 		}
 		case OP_GET_LOCAL:
 		{
@@ -473,6 +494,13 @@ static InterpretResult run()
 		{
 			ObjString *name = READ_STRING();
 			tableSet(&vm.globals, name, peek(0));
+			pop();
+			break;
+		}
+		case OP_DEFINE_FIELD:
+		{
+			ObjString *name = READ_STRING();
+			tableSet(&AS_CLASS(peek(1))->fields, name, peek(0));
 			pop();
 			break;
 		}
@@ -530,13 +558,22 @@ static InterpretResult run()
 		{
 			if (!IS_INSTANCE(peek(1)))
 			{
-				runtimeError("Cannot set field of non-instance value.");
-				// TODO: "...value: %s.", valueToString(peek(0)); ofzo
+				runtimeError("Cannot set field of non-instance value: %s.", valueToString(peek(0)));
 				return INTERPRET_RUNTIME_ERROR;
 			}
 
 			ObjInstance *instance = AS_INSTANCE(peek(1));
-			tableSet(&instance->fields, READ_STRING(), peek(0));
+
+			// no new fields!
+			ObjString *field = READ_STRING();
+			if (!tableGet(&instance->fields, field, &NULL_VAL))
+			{
+				runtimeError("Cannot create new field '%s' of instance.", field->chars);
+				return INTERPRET_RUNTIME_ERROR;
+			}
+
+			tableSet(&instance->fields, field, peek(0));
+			
 			Value value = pop();
 			pop();
 			push(value);
@@ -589,6 +626,17 @@ static InterpretResult run()
 
 			setValueArray(&array->array, index, newvalue);
 			push(OBJ_VAL(array));
+			break;
+		}
+		case OP_ARRAY_LENGTH:
+		{
+			Value array = pop();
+			if (!IS_ARRAY(array))
+			{
+				runtimeError("Cannot iterate over non-array value: %s.", valueToString(array));
+				return INTERPRET_RUNTIME_ERROR;
+			}
+			push(NUMBER_VAL(AS_ARRAY(array)->array.count));
 			break;
 		}
 		case OP_ARRAY:

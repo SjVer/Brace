@@ -1,11 +1,2 @@
-var arr = [1,2,3,4];
-arr[2] = "TWO";
-print arr;
-exit;
-
-var a = 1;
-a++;
-{
-	var b = 2;
-	b++;
-}
+Var typevar = TypeOf(Clock);
+Print typevar;

@@ -112,7 +112,7 @@ ObjInstance *newInstance(ObjClass *klass)
 ObjUpvalue *newUpvalue(Value *slot)
 {
 	ObjUpvalue *upvalue = ALLOCATE_OBJ(ObjUpvalue, OBJ_UPVALUE);
-	upvalue->closed = NIL_VAL;
+	upvalue->closed = NULL_VAL;
 	upvalue->location = slot;
 	upvalue->next = NULL;
 	return upvalue;
@@ -144,7 +144,7 @@ static ObjString *allocateString(char *chars, int length, uint32_t hash)
 	string->hash = hash;
 
 	push(OBJ_VAL(string)); // keep string safe from GC
-	tableSet(&vm.strings, string, NIL_VAL);
+	tableSet(&vm.strings, string, NULL_VAL);
 	pop();
 	return string;
 }
@@ -199,7 +199,7 @@ static char *functionToString(ObjFunction *function)
 {
 	if (function->name == NULL)
 		return "<script>";
-	return formatString("<function %s>", function->name->chars);
+	return formatString("<Fun %s>", function->name->chars);
 }
 
 static char *arrayToString(ObjArray *array)
@@ -217,8 +217,6 @@ static char *arrayToString(ObjArray *array)
 	return formatString("%s]", ret);
 }
 
-
-
 char *objectToString(Value value)
 {
 	switch (OBJ_TYPE(value))
@@ -229,7 +227,7 @@ char *objectToString(Value value)
 			AS_INSTANCE(AS_BOUND_METHOD(value)->receiver)->klass->name->chars);
 	
 	case OBJ_CLASS:
-		return formatString("<class %s>", AS_CLASS(value)->name->chars);
+		return formatString("<Cls %s>", AS_CLASS(value)->name->chars);
 	
 	case OBJ_CLOSURE:
 		return functionToString(AS_CLOSURE(value)->function);
@@ -241,7 +239,7 @@ char *objectToString(Value value)
 		return formatString("<%s instance>", AS_INSTANCE(value)->klass->name->chars);
 	
 	case OBJ_NATIVE:
-		return formatString("<native function %s>", AS_NATIVE(value)->name->chars);
+		return formatString("<native Fun %s>", AS_NATIVE(value)->name->chars);
 
 	case OBJ_STRING:
 		return AS_CSTRING(value);

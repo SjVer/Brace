@@ -67,8 +67,8 @@ int disassembleInstruction(Chunk *chunk, int offset)
     {
     case OP_CONSTANT:
         return constantInstruction("OP_CONSTANT", chunk, offset);
-    case OP_NIL:
-        return simpleInstruction("OP_NIL", offset);
+    case OP_NULL:
+        return simpleInstruction("OP_NULL", offset);
     case OP_TRUE:
         return simpleInstruction("OP_TRUE", offset);
     case OP_FALSE:
@@ -76,7 +76,9 @@ int disassembleInstruction(Chunk *chunk, int offset)
     case OP_POP:
         return simpleInstruction("OP_POP", offset);
     case OP_DUPLICATE:
-        return simpleInstruction("OP_DUPLICATE", offset);
+        return byteInstruction("OP_DUPLICATE", chunk, offset);
+    case OP_TERNARY:
+        return simpleInstruction("OP_TERNARY", offset);
     case OP_GET_LOCAL:
         return byteInstruction("OP_GET_LOCAL", chunk, offset);
     case OP_SET_LOCAL:
@@ -87,6 +89,8 @@ int disassembleInstruction(Chunk *chunk, int offset)
         return constantInstruction("OP_GET_GLOBAL", chunk, offset);
     case OP_DEFINE_GLOBAL:
         return constantInstruction("OP_DEFINE_GLOBAL", chunk, offset);
+    case OP_DEFINE_FIELD:
+        return constantInstruction("OP_DEFINE_FIELD", chunk, offset);
     case OP_GET_UPVALUE:
         return byteInstruction("OP_GET_UPVALUE", chunk, offset);
     case OP_SET_UPVALUE:
@@ -101,6 +105,8 @@ int disassembleInstruction(Chunk *chunk, int offset)
         return simpleInstruction("OP_GET_INDEX", offset);
     case OP_SET_INDEX:
         return simpleInstruction("OP_SET_INDEX", offset);
+    case OP_ARRAY_LENGTH:
+        return simpleInstruction("OP_ARRAY_LENGTH", offset);
     case OP_ARRAY:
         return byteInstruction("OP_ARRAY", chunk, offset);
     case OP_EQUAL:

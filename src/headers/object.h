@@ -31,6 +31,7 @@ typedef enum
 {
 	OBJ_ARRAY,
 	OBJ_BOUND_METHOD,
+	// OBJ_BLOCK,
 	OBJ_CLASS,
 	OBJ_CLOSURE,
 	OBJ_FUNCTION,
@@ -82,6 +83,12 @@ typedef struct ObjUpvalue
 	struct ObjUpvalue *next;
 } ObjUpvalue;
 
+// typedef struct
+// {
+// 	Obj obj;
+// 	Chunk chunk;
+// } ObjBlock;
+
 typedef struct
 {
 	Obj obj;
@@ -95,6 +102,7 @@ typedef struct
 	Obj obj;
 	ObjString *name;
 	Table methods;
+	Table fields;
 } ObjClass;
 
 typedef struct

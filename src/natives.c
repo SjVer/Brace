@@ -33,7 +33,7 @@ static Value clockNative(int argCount, Value *args)
 static Value clearNative(int argCount, Value *args)
 {
     system("@cls||clear");
-    return NIL_VAL;
+    return NULL_VAL;
 }
 
 static Value sleepNative(int argCount, Value *args)
@@ -42,7 +42,12 @@ static Value sleepNative(int argCount, Value *args)
         return nativeRuntimeError("Expected an argument of type number");
 
     sleep(AS_NUMBER(args[0]));
-    return NIL_VAL;
+    return NULL_VAL;
+}
+
+static Value typeNative(int argCount, Value *args)
+{
+    return TYPE_VAL(args[0].type);
 }
 
 static Value strNative(int argCount, Value *args)
@@ -91,7 +96,7 @@ static Value inputNative(int argCount, Value *args)
     if (line == NULL)
     {
         runtimeError("A Memory error occured on input()!?");
-        return NIL_VAL;
+        return NULL_VAL;
     }
 
     int c = EOF;
@@ -127,11 +132,13 @@ static Value inputNative(int argCount, Value *args)
 
 void defineNatives()
 {
-    defineNative("clock", clockNative, 0);
-    defineNative("clear", clearNative, 0);
-    defineNative("sleep", sleepNative, 1);
-    defineNative("str",   strNative,   1);
-    defineNative("bool",  boolNative,  1);
-    defineNative("array", arrayNative, 1);
-    defineNative("input", inputNative, -1);
+    defineNative("Clock",    clockNative, 0);
+    defineNative("Clear",    clearNative, 0);
+    defineNative("Sleep",    sleepNative, 1);
+    defineNative("GetInput", inputNative, -1);
+    
+    defineNative("TypeOf",   typeNative,  1);
+    defineNative("Str",      strNative,   1);
+    defineNative("Bool",     boolNative,  1);
+    defineNative("Array",    arrayNative, 1);
 }

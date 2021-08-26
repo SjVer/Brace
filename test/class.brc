@@ -1,12 +1,21 @@
-class CoffeeMaker {
-  init(coffee) {
+Cls CoffeeMaker {
+  init [coffee] {
     this.coffee = coffee;
   }
 
-  brew() {
-    print "Enjoy your cup of " + this.coffee;
+  brew [] {
+    Print "Enjoy your cup of " + this.coffee + "!";
   }
 }
 
-var maker = CoffeeMaker("coffee and chicory");
+Var maker = CoffeeMaker("coffee and chicory");
 maker.brew();
+
+# inheritance
+Cls CappuchinoMaker < CoffeeMaker {
+  init [] {
+    this.coffee = "cappuchino";
+  }
+}
+
+CappuchinoMaker().brew();

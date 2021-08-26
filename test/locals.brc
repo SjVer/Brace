@@ -1,11 +1,11 @@
-var myGlobal = 123;
+Var myGlobal = 123;
 {
-    var myLocal_one = 456;
-    print myLocal_one * ( 2 * 1);
+    Var myLocal_one = 456;
+    Print myLocal_one * ( 2 * 1);
     {
-        var myLocal_two = 789;
-        print myLocal_one + myLocal_two;
+        Var myLocal_two = 789;
+        Print myLocal_one + myLocal_two;
     }
-    var myLocal_three = 1;
+    Var myLocal_three = 1;
 }
-print myGlobal;
+Print myGlobal;
