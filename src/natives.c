@@ -47,7 +47,7 @@ static Value sleepNative(int argCount, Value *args)
 
 static Value typeNative(int argCount, Value *args)
 {
-    return TYPE_VAL(args[0].type);
+    return OBJ_VAL(newDataType(args[0]));
 }
 
 static Value strNative(int argCount, Value *args)
@@ -59,21 +59,6 @@ static Value strNative(int argCount, Value *args)
 static Value boolNative(int argCount, Value *args)
 {
     return BOOL_VAL(!isFalsey(args[0]));
-}
-
-static Value arrayNative(int argCount, Value *args)
-{
-    if (!checkArg(args[0], VAL_OBJ, OBJ_STRING))
-        return nativeRuntimeError("Expect an argument of type string");
-    
-    char *string = AS_CSTRING(args[0]);
-    ObjArray *array = newArray();
-
-    for (int i = 0; i < strlen(string); i++)
-        writeValueArray(&array->array, OBJ_VAL(
-            copyString(formatString("%c", string[i]), 2)));
-
-    return OBJ_VAL(array);
 }
 
 // yoinked from https://github.com/valkarias
@@ -140,5 +125,4 @@ void defineNatives()
     defineNative("TypeOf",   typeNative,  1);
     defineNative("Str",      strNative,   1);
     defineNative("Bool",     boolNative,  1);
-    defineNative("Array",    arrayNative, 1);
 }

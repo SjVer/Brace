@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "compiler.h"
 #include "common.h"
@@ -13,6 +14,7 @@
 #include "object.h"
 #include "mem.h"
 #include "natives.h"
+#include "methods.h"
 #include "vm.h"
 
 VM vm;
@@ -79,6 +81,7 @@ void initVM()
 	vm.initString = copyString("init", 4);
 
 	defineNatives();
+	defineAllMethods();
 }
 
 // free the VM
@@ -101,6 +104,11 @@ void push(Value value)
 Value pop()
 {
 	vm.stackTop--;
+
+	// printf("POPPING: ");
+	// printValue(*vm.stackTop);
+	// printf("\n");
+	
 	return *vm.stackTop;
 }
 
@@ -193,6 +201,28 @@ static bool callValue(Value callee, int argCount)
 			push(result);
 			return true;
 		}
+		case OBJ_BOUND_N_M:
+		{
+			ObjBoundNativeMethod *method = AS_BOUND_N_M(callee);
+			push(method->receiver);
+			argCount++;
+
+			// arity -1 indicates that the arity is handled by the native
+			if (method->native->arity != -1 && argCount != method->native->arity)
+			{
+				runtimeError("Expected %d arguments but got %d.", method->native->arity, argCount);
+				return false;
+			}
+
+			Value result = method->native->function(argCount, vm.stackTop - argCount);
+			// -1 as result type marks runtimeError inside native
+			if (result.type == -1)
+				return false;
+
+			vm.stackTop -= argCount + 1;
+			push(result);
+			return true;
+		}
 		default:
 			break; // Non-callable object type.
 		}
@@ -212,28 +242,88 @@ static bool invokeFromClass(ObjClass *klass, ObjString *name, int argCount)
 	return call(AS_CLOSURE(method), argCount);
 }
 
+static bool bindNativeMethod(Value value, ObjString *name)
+{
+	// ObjBoundNativeMethod *method = newBoundNativeMethod();
+	ValueArray *methods;
+	bool arrayNotFound = false;
+
+	// get array of methods of value type
+	switch (value.type)
+	{
+	case VAL_NUMBER: methods = &numberMethods; break;
+	case VAL_OBJ:
+		switch (OBJ_TYPE(value))
+		{
+		case OBJ_STRING: methods = &stringMethods; break;
+		case OBJ_ARRAY:  methods = &arrayMethods; break;
+		default: arrayNotFound = true; break;
+		}
+		break;
+	default: arrayNotFound = true; break;
+	}
+
+	if (arrayNotFound)
+	{
+		runtimeError("Undefined property '%s'.", name->chars);
+		return false;
+	}
+
+	// get method from array
+	ObjNative *native;
+	bool methodNotFound = true;
+	for (int i = 0; i < methods->count; i++)
+	{
+		if (valuesEqual(OBJ_VAL(AS_NATIVE(methods->values[i])->name), OBJ_VAL(name)))
+		{
+			native = AS_NATIVE(methods->values[i]);
+			methodNotFound = false;
+			break;
+		}
+	}
+	
+	ObjBoundNativeMethod *method = newBoundNativeMethod(value, native);
+
+	if (methodNotFound)
+	{
+		runtimeError("Undefined property '%s'.", name->chars);
+		return false;
+	}
+
+	push(OBJ_VAL(method));
+	return true;
+}
+
 // shortcut that combines getting a method and calling it for performance
 static bool invoke(ObjString *name, int argCount)
 {
 	Value receiver = peek(argCount);
 
-	if (!IS_INSTANCE(receiver))
+	// if (!IS_INSTANCE(receiver))
+	// {
+	// 	runtimeError("Only instances have methods.");
+	// 	return false;
+	// }
+	if (IS_INSTANCE(receiver))
 	{
-		runtimeError("Only instances have methods.");
-		return false;
+		ObjInstance *instance = AS_INSTANCE(receiver);
+
+		// method can be stored inside a field as well
+		Value value;
+		if (tableGet(&instance->fields, name, &value))
+		{
+			vm.stackTop[-argCount - 1] = value;
+			return callValue(value, argCount);
+		}
+
+		return invokeFromClass(instance->klass, name, argCount);
 	}
-
-	ObjInstance *instance = AS_INSTANCE(receiver);
-
-	// method can be stored inside a field as well
-	Value value;
-	if (tableGet(&instance->fields, name, &value))
+	else
 	{
-		vm.stackTop[-argCount - 1] = value;
-		return callValue(value, argCount);
+		if (!bindNativeMethod(receiver, name))
+			return false;
+		return callValue(pop(), argCount);
 	}
-
-	return invokeFromClass(instance->klass, name, argCount);
 }
 
 // looks up and binds the given method if it exists, otherwise 
@@ -361,13 +451,12 @@ static void concatenate()
 	push(OBJ_VAL(result));
 }
 
-// // add a string and any other type together
-// // by transforming the other type into a string
-// // and concatenate those
-// static void concatenate_other(bool string_is_first)
-// {
-// 	//
-// }
+
+
+
+
+
+
 
 // run shit
 static InterpretResult run()
@@ -397,7 +486,8 @@ static InterpretResult run()
 	{
 // debugging stuff
 #ifdef DEBUG_TRACE_EXECUTION
-		// sleep(1);
+		// sleep(0);
+		valuesEqual(NULL_VAL, NULL_VAL);
 		printf("\n\nSTACK:    ");
 		// printf("          ");
 		// if (vm.stack[0] == *vm.stackTop)
@@ -530,28 +620,41 @@ static InterpretResult run()
 		}
 		case OP_GET_PROPERTY:
 		{
-			if (!IS_INSTANCE(peek(0)))
+
+			if (IS_INSTANCE(peek(0)))
 			{
-				runtimeError("Cannot get property of non-instance value.");
-				// TODO: "...value: %s.", valueToString(peek(0)); ofzo
-				return INTERPRET_RUNTIME_ERROR;
+				ObjInstance *instance = AS_INSTANCE(peek(0));
+				ObjString *name = READ_STRING();
+
+				Value value;
+				// first check for field
+				if (tableGet(&instance->fields, name, &value))
+				{
+					pop(); // Instance.
+					push(value);
+					break;
+				}
+
+				// no field found so method
+				if (!bindMethod(instance->klass, name))
+				{
+					return INTERPRET_RUNTIME_ERROR;
+				}
 			}
 
-			ObjInstance *instance = AS_INSTANCE(peek(0));
-			ObjString *name = READ_STRING();
-
-			Value value;
-			if (tableGet(&instance->fields, name, &value))
+			else
 			{
-				pop(); // Instance.
-				push(value);
+				Value value = peek(0);
+				ObjString *name = READ_STRING();
+				
+				if (!bindNativeMethod(value, name))
+				{
+					return INTERPRET_RUNTIME_ERROR;
+				}
+
 				break;
 			}
 
-			if (!bindMethod(instance->klass, name))
-			{
-				return INTERPRET_RUNTIME_ERROR;
-			}
 			break;
 		}
 		case OP_SET_PROPERTY:
@@ -737,6 +840,18 @@ static InterpretResult run()
 		case OP_DIVIDE:
 		{
 			BINARY_OP(NUMBER_VAL, /);
+			break;
+		}
+		case OP_MODULO:
+		{
+			Value b = pop();
+			Value a = pop();
+			if (!(IS_NUMBER(a) && IS_NUMBER(b)))
+			{
+				runtimeError("Operands must be numbers");
+				return INTERPRET_RUNTIME_ERROR;
+			}
+			push(NUMBER_VAL(fmod(AS_NUMBER(a), AS_NUMBER(b))));
 			break;
 		}
 		case OP_NOT:

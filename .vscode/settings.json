@@ -29,7 +29,9 @@
         "typeinfo": "c",
         "valarray": "c",
         "mem.h": "c",
-        "iterator": "c"
+        "iterator": "c",
+        "initializer_list": "c",
+        "mutex": "c"
     },
     "C_Cpp.intelliSenseEngine": "Default"
 }

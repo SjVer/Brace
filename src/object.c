@@ -47,6 +47,17 @@ ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method)
 
 
 
+// allocates and returns a new bound native method
+ObjBoundNativeMethod *newBoundNativeMethod(Value receiver, ObjNative *native)
+{
+	ObjBoundNativeMethod *bound = ALLOCATE_OBJ(ObjBoundNativeMethod, OBJ_BOUND_N_M);
+	bound->native = native;
+	bound->receiver = receiver;
+	return bound;
+}
+
+
+
 // allocates and returns a new class
 ObjClass *newClass(ObjString *name)
 {
@@ -85,6 +96,7 @@ ObjNative *newNative(NativeFn function, int arity, const char *name)
 	native->name = copyString(name, strlen(name));
 	return native;
 }
+
 
 // allocates and returns a new ObjFunction
 ObjFunction *newFunction()
@@ -133,6 +145,15 @@ ObjArray *newArray()
 	return array;
 }
 
+
+
+ObjDataType *newDataType(Value value)
+{
+	ObjDataType *type = ALLOCATE_OBJ(ObjDataType, OBJ_DATA_TYPE);
+	type->valueType = value.type;
+	type->objType = IS_OBJ(value) ? AS_OBJ(value)->type : 0;
+	return type; 
+}
 
 
 // allocates a ObjString
@@ -217,6 +238,35 @@ static char *arrayToString(ObjArray *array)
 	return formatString("%s]", ret);
 }
 
+static char *dataTypeToString(Value value)
+{
+	switch (AS_DATA_TYPE(value)->valueType)
+	{
+	case VAL_BOOL:   return "Bln";
+	case VAL_NULL:   return "Null";
+	case VAL_NUMBER: return "Num";
+	case VAL_OBJ:
+	{
+		// return "<OBJ_TYPE_NOT_YET_IMPLEMENTED>";
+		switch (AS_DATA_TYPE(value)->objType)
+		{
+		case OBJ_ARRAY:         return "Array";
+		case OBJ_BOUND_METHOD:  return "Method";
+		case OBJ_CLASS:         return "Cls";
+		case OBJ_CLOSURE:       return "Fun";
+		case OBJ_FUNCTION:      return "Fun";
+		// case OBJ_INSTANCE:      return AS_INSTANCE(value)->klass->name->chars;
+		case OBJ_INSTANCE:      return "Inst";
+		case OBJ_NATIVE:        return "Fun";
+		case OBJ_STRING:        return "Str";
+		case OBJ_DATA_TYPE:     return "Type";
+		default: return "<UNKNOWN-OBJ-TYPE>";
+		}
+	}
+	default: return "<UNKNOWN-TYPE>";
+	}
+}
+
 char *objectToString(Value value)
 {
 	switch (OBJ_TYPE(value))
@@ -241,6 +291,10 @@ char *objectToString(Value value)
 	case OBJ_NATIVE:
 		return formatString("<native Fun %s>", AS_NATIVE(value)->name->chars);
 
+	case OBJ_BOUND_N_M:
+		return formatString("<native method %s of type>",
+			AS_BOUND_N_M(value)->native->name->chars);
+
 	case OBJ_STRING:
 		return AS_CSTRING(value);
 	
@@ -249,6 +303,9 @@ char *objectToString(Value value)
 
 	case OBJ_ARRAY:
 		return arrayToString(AS_ARRAY(value));
+
+	case OBJ_DATA_TYPE:
+		return dataTypeToString(value);
 	}
 	return "<OBJ-TO-STRING-ERROR>";
 }
@@ -256,45 +313,5 @@ char *objectToString(Value value)
 // prints an Obj
 void printObject(Value value)
 {
-	// switch (OBJ_TYPE(value))
-	// {
-	// case OBJ_BOUND_METHOD:
-	// 	// printFunction(AS_BOUND_METHOD(value)->method->function);
-	// 	printf("<method %s of %s instance>",
-	// 		AS_BOUND_METHOD(value)->method->function->name->chars,
-	// 		AS_INSTANCE(AS_BOUND_METHOD(value)->receiver)->klass->name->chars);
-	// 	break;
-	// case OBJ_CLASS:
-	// 	printf("<class %s>", AS_CLASS(value)->name->chars);
-	// 	break;
-	// case OBJ_CLOSURE:
-	// 	printFunction(AS_CLOSURE(value)->function);
-	// 	break;
-	// case OBJ_FUNCTION:
-	// 	printFunction(AS_FUNCTION(value));
-	// 	break;
-	// case OBJ_INSTANCE:
-	// 	printf("<%s instance>", AS_INSTANCE(value)->klass->name->chars);
-	// 	break;
-	// case OBJ_NATIVE:
-	// 	printf("<native function>");
-	// 	break;
-	// case OBJ_STRING:
-	// 	printf("%s", AS_CSTRING(value));
-	// 	break;
-	// case OBJ_UPVALUE:
-	// 	printf("<upvalue>");
-	// 	break;
-	// case OBJ_ARRAY:
-	// 	printf("[");
-	// 	// Value *item = AS_ARRAY(value)->items.values;
-	// 	for (int i = 0; i < AS_ARRAY(value)->length; i++)
-	// 	{
-	// 		printValue(AS_ARRAY(value)->items.values[i]);
-	// 		printf(i == AS_ARRAY(value)->length - 1 ? "" : ", ");
-	// 	}
-	// 	printf("]");
-	// 	break;
-	// }
 	printf("%s", objectToString(value));
 }

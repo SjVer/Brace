@@ -284,6 +284,7 @@ Token scanToken()
 	case '.': return makeToken(TOKEN_DOT);
 	case '/': return makeToken(TOKEN_SLASH);
 	case '*': return makeToken(TOKEN_STAR);
+	case '%': return makeToken(TOKEN_MODULO);
 
 	// two-character
 	// case '+': return makeToken(match('+') ? TOKEN_PLUS_PLUS : TOKEN_PLUS);

@@ -4,7 +4,7 @@
 
 # Compiler settings - Can be customized.
 CC = gcc
-CXXFLAGS = -std=c11 -Wall -g
+CXXFLAGS = -std=c11 -Wall -lm
 LDFLAGS = 
 
 # Makefile settings - Can be customized.
@@ -56,7 +56,7 @@ all: $(APP)
 $(APP): $(OBJ) | makedirs
 	@printf "[final] compiling final product $(notdir $@)..."
 	@$(CC) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
-	@cp $(APP) "."
+	@#cp $(APP) "."
 	@printf "\b\b done!\n"
 
 # Creates the dependecy rules
@@ -134,6 +134,6 @@ debug-gc-log: CXXFLAGS += $(DEBUG_GC_LOG_DEFS)
 debug-gc-log: printdebug-gc
 debug-gc-log: all
 
-debug-gc-stress: CXXFLAGS  += $(DEBUG_GC_STRESS_DEFS)
+debug-gc-stress: CXXFLAGS  += $(DEBUG_GC_STRESS_DEFS) -g -ggdb
 debug-gc-stress: printdebug-gc
 debug-gc-stress: all

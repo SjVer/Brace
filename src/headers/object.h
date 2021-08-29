@@ -14,8 +14,10 @@
 #define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
 #define IS_INSTANCE(value) isObjType(value, OBJ_INSTANCE)
 #define IS_NATIVE(value) isObjType(value, OBJ_NATIVE)
+#define IS_BOUND_N_M(value) isObjType(value, OBJ_BOUND_N_M)
 #define IS_STRING(value) isObjType(value, OBJ_STRING)
 #define IS_ARRAY(value) isObjType(value, OBJ_ARRAY)
+#define IS_DATA_TYPE(value) isObjType(value, OBJ_DATA_TYPE)
 
 #define AS_BOUND_METHOD(value) ((ObjBoundMethod *)AS_OBJ(value))
 #define AS_CLASS(value) ((ObjClass *)AS_OBJ(value))
@@ -23,22 +25,25 @@
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
 #define AS_INSTANCE(value) ((ObjInstance *)AS_OBJ(value))
 #define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value)))//->function)
+#define AS_BOUND_N_M(value) (((ObjBoundNativeMethod *)AS_OBJ(value)))//->function)
 #define AS_STRING(value) ((ObjString *)AS_OBJ(value))
 #define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)
 #define AS_ARRAY(value) ((ObjArray *)AS_OBJ(value))
+#define AS_DATA_TYPE(value) ((ObjDataType *)AS_OBJ(value))
 
 typedef enum
 {
 	OBJ_ARRAY,
 	OBJ_BOUND_METHOD,
-	// OBJ_BLOCK,
 	OBJ_CLASS,
 	OBJ_CLOSURE,
 	OBJ_FUNCTION,
 	OBJ_INSTANCE,
 	OBJ_NATIVE,
+	OBJ_BOUND_N_M,
 	OBJ_STRING,
 	OBJ_UPVALUE,
+	OBJ_DATA_TYPE,
 } ObjType;
 
 struct Obj
@@ -57,6 +62,13 @@ typedef struct
 	int arity;
 	ObjString *name;
 } ObjNative;
+
+typedef struct
+{
+	Obj obj;
+	ObjNative *native;
+	Value receiver;
+} ObjBoundNativeMethod;
 
 typedef struct
 {
@@ -82,12 +94,6 @@ typedef struct ObjUpvalue
 	Value closed;
 	struct ObjUpvalue *next;
 } ObjUpvalue;
-
-// typedef struct
-// {
-// 	Obj obj;
-// 	Chunk chunk;
-// } ObjBlock;
 
 typedef struct
 {
@@ -127,8 +133,15 @@ typedef struct
 	ValueArray array;
 } ObjArray;
 
+typedef struct
+{
+	Obj obj;
+	ValueType valueType;
+	ObjType objType;
+} ObjDataType;
 
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method);
+ObjBoundNativeMethod *newBoundNativeMethod(Value receiver, ObjNative *native);
 ObjClass *newClass(ObjString *name);
 ObjClosure *newClosure(ObjFunction *function);
 ObjFunction *newFunction();
@@ -137,6 +150,7 @@ ObjNative *newNative(NativeFn function, int arity, const char *name);
 ObjUpvalue *newUpvalue(Value *slot);
 // ObjArray *newArray(Value *items, int length);
 ObjArray *newArray();
+ObjDataType *newDataType(Value value);
 ObjString *takeString(char *chars, int length);
 ObjString *copyString(const char *chars, int length);
 char *objectToString(Value value);

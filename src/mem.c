@@ -120,7 +120,14 @@ static void blackenObject(Obj *object)
         markArray(&array->array);
         break;
     }
+    case OBJ_BOUND_N_M:
+    {
+        ObjBoundNativeMethod *method = (ObjBoundNativeMethod *)object;
+        markValue(method->receiver);
+        break;
+    }
 
+    case OBJ_DATA_TYPE:
     case OBJ_NATIVE:
     case OBJ_STRING:
         break;
@@ -309,6 +316,11 @@ static void freeObject(Obj *object)
         FREE(ObjNative, object);
         break;
     }
+    case OBJ_BOUND_N_M:
+    {
+        FREE(ObjBoundNativeMethod, object);
+        break;
+    }
     case OBJ_UPVALUE:
     {
         FREE(ObjUpvalue, object);
@@ -319,6 +331,12 @@ static void freeObject(Obj *object)
         ObjArray *array = (ObjArray *)object;
         freeValueArray(&array->array);
         FREE(ObjArray, object);
+        break;
+    }
+    case OBJ_DATA_TYPE:
+    {
+        FREE(ObjDataType, object);
+        break;
     }
     }
 }

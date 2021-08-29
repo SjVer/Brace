@@ -47,54 +47,12 @@ char *valueToString(Value value)
     case VAL_BOOL:   return AS_BOOL(value) ? "true" : "false";
     case VAL_NUMBER: return formatString("%g", AS_NUMBER(value));
     case VAL_OBJ:    return objectToString(value);
-
-    case VAL_TYPE:
-        switch (AS_TYPE(value))
-        {
-        case VAL_BOOL:   return "Bln";
-        case VAL_NULL:   return "Null";
-        case VAL_NUMBER: return "Num";
-        case VAL_TYPE:   return "Type";
-        case VAL_OBJ:
-        {
-            return "<OBJ_TYPE_NOT_YET_IMPLEMENTED>";
-            switch (OBJ_TYPE(value)) // this fucking line triggers a fucking segfault
-            {
-            case OBJ_ARRAY:         return "Array";
-            case OBJ_BOUND_METHOD:  return "Method";
-            case OBJ_CLASS:         return "Cls";
-            case OBJ_CLOSURE:       return "Fun";
-            case OBJ_FUNCTION:      return "Fun";
-            case OBJ_INSTANCE:      return AS_INSTANCE(value)->klass->name->chars;
-            case OBJ_NATIVE:        return "Fun";
-            case OBJ_STRING:        return "Str";
-            case OBJ_UPVALUE:       return valueToString(TYPE_VAL(value.type));
-            default: return "<UNKNOWN-OBJ-TYPE>";
-            }
-        }
-        default: return "<UNKNOWN-TYPE>";
-        }
     }
     return "<VALUE-TO-STRING-ERROR>";
 }
 
 void printValue(Value value)
 {
-    // switch (value.type)
-    // {
-    // case VAL_BOOL:
-    //     printf(AS_BOOL(value) ? "true" : "false");
-    //     break;
-    // case VAL_NULL:
-    //     printf("null");
-    //     break;
-    // case VAL_NUMBER:
-    //     printf("%g", AS_NUMBER(value));
-    //     break;
-    // case VAL_OBJ:
-    //     printObject(value);
-    //     break;
-    // }
     printf("%s", valueToString(value));
 }
 

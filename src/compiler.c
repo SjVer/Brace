@@ -61,7 +61,6 @@ typedef struct
 
 typedef enum
 {
-	TYPE_BLOCK,
 	TYPE_FUNCTION,
 	TYPE_INITIALIZER,
 	TYPE_METHOD,
@@ -127,7 +126,6 @@ static void foreachStatement();
 static void whileStatement();
 static void declaration();
 
-static void blockVal(bool canAssing);
 static void grouping(bool canAssign);
 static void number(bool canAssign);
 static void unary(bool canAssign);
@@ -463,7 +461,7 @@ ParseRule rules[] = {
 	// token				// prefix,  infix,  precedence
 	[TOKEN_LEFT_PAREN]    	= {grouping,call,   PREC_CALL},
 	[TOKEN_RIGHT_PAREN] 	= {NULL, 	NULL,   PREC_NONE},
-	[TOKEN_LEFT_BRACE] 		= {blockVal,NULL,   PREC_NONE},
+	[TOKEN_LEFT_BRACE] 		= {NULL,	NULL,   PREC_NONE},
 	[TOKEN_RIGHT_BRACE] 	= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_LEFT_B_BRACE] 	= {array, 	index,  PREC_CALL},
 	[TOKEN_RIGHT_B_BRACE] 	= {NULL, 	NULL,   PREC_NONE},
@@ -478,6 +476,7 @@ ParseRule rules[] = {
 	[TOKEN_SEMICOLON] 		= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_SLASH] 			= {NULL, 	binary, PREC_FACTOR},
 	[TOKEN_STAR] 			= {NULL, 	binary, PREC_FACTOR},
+	[TOKEN_MODULO]			= {NULL,	binary, PREC_FACTOR},
 	[TOKEN_BANG] 			= {unary, 	NULL,   PREC_NONE},
 	[TOKEN_BANG_EQUAL] 		= {NULL, 	binary, PREC_EQUALITY},
 	[TOKEN_EQUAL] 			= {NULL, 	NULL,   PREC_NONE},
@@ -757,35 +756,29 @@ static void function(FunctionType type)
 	initCompiler(&compiler, type);
 	beginScope();
 
-	if (type != TYPE_BLOCK)
+	consume(TOKEN_LEFT_B_BRACE, "Expect '[' after function name.");
+
+	// parameters
+	if (!check(TOKEN_RIGHT_B_BRACE))
 	{
-		consume(TOKEN_LEFT_B_BRACE, "Expect '[' after function name.");
-
-		// parameters
-		if (!check(TOKEN_RIGHT_B_BRACE))
+		do
 		{
-			do
+			current->function->arity++;
+			if (current->function->arity > 255)
 			{
-				current->function->arity++;
-				if (current->function->arity > 255)
-				{
-					errorAtCurrent("Can't have more than 255 parameters.");
-				}
-				uint8_t constant = parseVariable("Expect parameter name.");
-				defineVariable(constant);
-			} while (match(TOKEN_COMMA));
-		}
-		consume(TOKEN_RIGHT_B_BRACE, "Expect ']' after parameters.");
-
-		// body
-		consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+				errorAtCurrent("Can't have more than 255 parameters.");
+			}
+			uint8_t constant = parseVariable("Expect parameter name.");
+			defineVariable(constant);
+		} while (match(TOKEN_COMMA));
 	}
+	consume(TOKEN_RIGHT_B_BRACE, "Expect ']' after parameters.");
+
+	// body
+	consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
 	block();
 
 	ObjFunction *function = endCompiler();
-
-	if (type == TYPE_BLOCK)
-		function->name = copyString("\b\b\b\bBlck", 8);
 
 	emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
 
@@ -1176,13 +1169,6 @@ static void whileStatement()
 	emitByte(OP_POP);
 }
 
-// compiles a codeblock value
-static void blockVal(bool canAssing)
-{
-	error("BLOCKS NOT YET IMPLEMENTED");
-	function(TYPE_BLOCK);
-}
-
 // compile a grouping
 static void grouping(bool canAssign)
 {
@@ -1367,6 +1353,9 @@ static void binary(bool canAssign)
 		break;
 	case TOKEN_SLASH:
 		emitByte(OP_DIVIDE);
+		break;
+	case TOKEN_MODULO:
+		emitByte(OP_MODULO);
 		break;
 	default:
 		return; // Unreachable.
