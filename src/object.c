@@ -64,6 +64,8 @@ ObjClass *newClass(ObjString *name)
 	ObjClass *klass = ALLOCATE_OBJ(ObjClass, OBJ_CLASS);
 	klass->name = name;
 	initTable(&klass->methods);
+	initTable(&klass->fields);
+	initTable(&klass->fieldsTypes);
 	return klass;
 }
 
@@ -102,9 +104,12 @@ ObjNative *newNative(NativeFn function, int arity, const char *name)
 ObjFunction *newFunction()
 {
 	ObjFunction *function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
+	// function->type = type;
 	function->arity = 0;
 	function->upvalueCount = 0;
 	function->name = NULL;
+	function->returnType = *newDataType(NULL_VAL, true);
+	initValueArray(&function->argTypes);
 	initChunk(&function->chunk);
 	return function;
 }
@@ -116,6 +121,7 @@ ObjInstance *newInstance(ObjClass *klass)
 	ObjInstance *instance = ALLOCATE_OBJ(ObjInstance, OBJ_INSTANCE);
 	instance->klass = klass;
 	initTable(&instance->fields);
+	initTable(&instance->fieldsTypes);
 	return instance;
 }
 
@@ -147,12 +153,83 @@ ObjArray *newArray()
 
 
 
-ObjDataType *newDataType(Value value)
+static char *dataTypeToString(Value value);
+
+ObjDataType *newDataType(Value value, bool isAny)
 {
 	ObjDataType *type = ALLOCATE_OBJ(ObjDataType, OBJ_DATA_TYPE);
 	type->valueType = value.type;
 	type->objType = IS_OBJ(value) ? AS_OBJ(value)->type : 0;
+	type->isAny = isAny;
+	type->invalid = false;
+	type->classType = IS_INSTANCE(value) ? *AS_INSTANCE(value)->klass : *newClass(copyString("",0));
 	return type; 
+}
+
+Value callDataType(ObjDataType *callee, int argCount, Value *args)
+{
+	char *errmsg = formatString("Type %s is not callable.", dataTypeToString(OBJ_VAL(callee)));
+
+	switch (callee->valueType)
+	{
+	case VAL_OBJ:
+		{
+			switch (callee->objType)	
+			{
+
+			default: break;
+			}
+		}
+
+	default: break;
+	}
+
+	Value err = OBJ_VAL(copyString(errmsg, strlen(errmsg)));
+	err.type = -1;
+	return err;
+}
+
+ObjDataType *dataTypeFromString(const char *str)
+{
+	ObjDataType *type = newDataType(NULL_VAL, true);
+	
+	// printf("\n\n\n");
+
+	if (strcmp(str, "Any")==0) return type;
+	type->isAny = false;
+
+	// check value types	
+	for(type->valueType = VAL_BOOL; type->valueType < VAL_OBJ; type->valueType++)
+	{
+		// printf("checking if %s == %s (%d)\n", str, dataTypeToString(OBJ_VAL(type)), type->valueType);
+		if (strcmp(str, dataTypeToString(OBJ_VAL(type))) == 0)
+			return type;
+	}
+
+	// printf("checking obj types\n");
+
+	// check object types	
+	for(type->objType = OBJ_ARRAY; type->objType <= OBJ_MODULE; type->objType++)
+	{
+		// printf("checking if %s == %s (%d)\n", str, dataTypeToString(OBJ_VAL(type)), type->objType);
+		if (strcmp(str, dataTypeToString(OBJ_VAL(type))) == 0)
+			return type;
+	}
+
+	type->invalid = true;
+	return type;
+}
+
+
+
+ObjModule *newModule(const char *name, const char *path)
+{
+	ObjModule *module = ALLOCATE_OBJ(ObjModule, OBJ_MODULE);
+	module->name = *copyString(name, strlen(name));
+	module->path = *copyString(path, strlen(path));
+	initTable(&module->fields);
+	initTable(&module->fieldsTypes);
+	return module;
 }
 
 
@@ -240,6 +317,9 @@ static char *arrayToString(ObjArray *array)
 
 static char *dataTypeToString(Value value)
 {
+	if (AS_DATA_TYPE(value)->isAny)
+		return "Any";
+
 	switch (AS_DATA_TYPE(value)->valueType)
 	{
 	case VAL_BOOL:   return "Bln";
@@ -255,11 +335,15 @@ static char *dataTypeToString(Value value)
 		case OBJ_CLASS:         return "Cls";
 		case OBJ_CLOSURE:       return "Fun";
 		case OBJ_FUNCTION:      return "Fun";
-		// case OBJ_INSTANCE:      return AS_INSTANCE(value)->klass->name->chars;
-		case OBJ_INSTANCE:      return "Inst";
 		case OBJ_NATIVE:        return "Fun";
 		case OBJ_STRING:        return "Str";
 		case OBJ_DATA_TYPE:     return "Type";
+		case OBJ_MODULE:		return "Mdl";
+		case OBJ_INSTANCE:		//return "Inst";
+			{
+				if (AS_DATA_TYPE(value)->classType.name->length == 0) return "Inst";
+				return AS_DATA_TYPE(value)->classType.name->chars;
+			}
 		default: return "<UNKNOWN-OBJ-TYPE>";
 		}
 	}
@@ -275,37 +359,19 @@ char *objectToString(Value value)
 		return formatString("<method %s of instance %s>",
 			AS_BOUND_METHOD(value)->method->function->name->chars,
 			AS_INSTANCE(AS_BOUND_METHOD(value)->receiver)->klass->name->chars);
-	
-	case OBJ_CLASS:
-		return formatString("<Cls %s>", AS_CLASS(value)->name->chars);
-	
-	case OBJ_CLOSURE:
-		return functionToString(AS_CLOSURE(value)->function);
-
-	case OBJ_FUNCTION:
-		return functionToString(AS_FUNCTION(value));
-	
-	case OBJ_INSTANCE:
-		return formatString("<%s instance>", AS_INSTANCE(value)->klass->name->chars);
-	
-	case OBJ_NATIVE:
-		return formatString("<native Fun %s>", AS_NATIVE(value)->name->chars);
-
+	case OBJ_CLASS:		return formatString("<Cls %s>", AS_CLASS(value)->name->chars);
+	case OBJ_CLOSURE:	return functionToString(AS_CLOSURE(value)->function);
+	case OBJ_FUNCTION:	return functionToString(AS_FUNCTION(value));
+	case OBJ_INSTANCE:	return formatString("<%s instance>", AS_INSTANCE(value)->klass->name->chars);
+	case OBJ_NATIVE:	return formatString("<native Fun %s>", AS_NATIVE(value)->name->chars);
 	case OBJ_BOUND_N_M:
 		return formatString("<native method %s of type>",
 			AS_BOUND_N_M(value)->native->name->chars);
-
-	case OBJ_STRING:
-		return AS_CSTRING(value);
-	
-	case OBJ_UPVALUE:
-		return "<upvalue>";
-
-	case OBJ_ARRAY:
-		return arrayToString(AS_ARRAY(value));
-
-	case OBJ_DATA_TYPE:
-		return dataTypeToString(value);
+	case OBJ_STRING:	return AS_CSTRING(value);
+	case OBJ_UPVALUE:	return "<upvalue>";
+	case OBJ_ARRAY:		return arrayToString(AS_ARRAY(value));
+	case OBJ_DATA_TYPE:	return dataTypeToString(value);
+	case OBJ_MODULE:	return formatString("<Mdl %s>", AS_MODULE(value)->name.chars);
 	}
 	return "<OBJ-TO-STRING-ERROR>";
 }

@@ -1,21 +1,30 @@
 Cls CoffeeMaker {
-  init [coffee] {
-    this.coffee = coffee;
-  }
+	Var coffee : Str;
 
-  brew [] {
-    Print "Enjoy your cup of " + this.coffee + "!";
-  }
+	Fun Init [coffee] {
+		this.coffee = coffee;
+	}
+
+	Fun Brew [] {
+		PrintLn "Enjoy your cup of " + this.coffee + "!";
+	}
 }
 
 Var maker = CoffeeMaker("coffee and chicory");
-maker.brew();
+maker.Brew();
 
 # inheritance
 Cls CappuchinoMaker < CoffeeMaker {
-  init [] {
-    this.coffee = "cappuchino";
-  }
+	Fun Init [] {
+		this.coffee = "cappuchino";
+	}
+
+	Fun SetCoffee [coffee: Str] {
+		super.Init(coffee);
+	}
 }
 
-CappuchinoMaker().brew();
+Var secondMaker = CappuchinoMaker();
+secondMaker.Brew();
+secondMaker.SetCoffee("coco");
+secondMaker.Brew();

@@ -1,0 +1,8 @@
+Package: brace
+Version: 1.0.0
+Maintainer: Sjoerd Vermeulen <sjoerd@marsenaar.com>
+Section: interpreters
+Architecture: arm64
+Priority: optional
+Description: The Brace interpreter
+ For more information go to https://github.com/SjVer/Brace

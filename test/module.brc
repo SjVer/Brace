@@ -1,0 +1,8 @@
+Var modvar = 123;
+Var modvar2 : Bln = true;
+
+Fun modfunc [arg] {
+    PrintLn arg;
+    PrintLn module.modvar;
+    PrintLn used_in_modfunc;
+}

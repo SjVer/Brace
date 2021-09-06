@@ -1,0 +1,10 @@
+Use module;
+
+PrintLn module.modvar;
+module.modvar = 456;
+PrintLn module.modvar;
+
+Var used_in_modfunc = "hey!";
+
+Var modfunc : Any = module.modfunc;
+modfunc("test");

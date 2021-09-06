@@ -126,7 +126,15 @@ static void blackenObject(Obj *object)
         markValue(method->receiver);
         break;
     }
-
+    case OBJ_MODULE:
+    {
+        ObjModule *module = (ObjModule *)object;
+        markTable(&module->fields);
+        markTable(&module->fieldsTypes);
+        markObject((Obj *)&module->name);
+        markObject((Obj *)&module->path);
+        break;
+    }
     case OBJ_DATA_TYPE:
     case OBJ_NATIVE:
     case OBJ_STRING:
@@ -336,6 +344,14 @@ static void freeObject(Obj *object)
     case OBJ_DATA_TYPE:
     {
         FREE(ObjDataType, object);
+        break;
+    }
+    case OBJ_MODULE:
+    {
+        ObjModule *module = (ObjModule *)object;
+        freeTable(&module->fields);
+        freeTable(&module->fieldsTypes);
+        FREE(ObjModule, object);
         break;
     }
     }

@@ -1,0 +1,138 @@
+# a simple app example
+
+Cls User {
+    Var name : Str;
+    Var email : Str;
+    Var pincode : Num;
+
+    Fun Init [name: Str, email: Str, pincode: Num] {
+        this.name = name;
+        this.email = email;
+        this.pincode = pincode;
+    }
+}
+
+Cls App {
+    Var name : Str;
+    Var users : Array;
+    Var currentUser;
+
+    Fun Init [name: Str] {
+        this.name = name;
+        this.currentUser = null;
+        PrintLn "Application " + name + " created!";
+    }
+
+    Fun LogIn -> Bln [username: Str, pincode: Num] {
+        Foreach(user : this.users) {
+            # iterate over existing users
+            If(user.name == username) {
+                
+                # user found!
+                If(user.pincode == pincode) {
+                    this.currentUser = user;
+                    Return true;
+
+                } Else Return false;
+            }
+        }
+        # user not found!
+        Return false;
+    }
+
+    Fun CheckUser -> Bln [username: Str] {
+        Foreach(user: this.users)
+        {
+            PrintLn user;
+            If(user.name == username) Return true;
+        }
+        Return false;
+    }
+
+    Fun addUser [username: Str, email: Str, pincode: Num] {
+        # check if pincode is correct
+        If (!pincode.IsInt()) {
+            PrintLn "Invalid pincode! Only numerical characters allowed.";
+            Return;
+        }
+        this.users.Append(User(username, email, pincode));
+    }
+}
+
+Var app = App("Test App");
+Var cmd : Str;
+Print "Welcome!";
+# main loop
+While (true) {
+
+    PrintLn "";
+    PrintLn "What would you like to do?";
+    Print "(login/logout/profile/signup/quit): ";
+    cmd = GetInput();
+    PrintLn "";
+
+    # parse cmd
+    If (cmd == "quit") {
+        PrintLn "Goodbye!";
+        Exit 0;
+    }
+    Else If (cmd == "signup") {
+        Print "Enter you username: ";
+        Var username = GetInput();
+
+        If (app.CheckUser(username))
+            PrintLn "User " + username + " already exists!";
+        Else {
+        
+            Print "Enter your email: ";
+            Var email = GetInput();
+
+            Var pincode = "0";
+            While (!pincode.ToNum()) {
+                Print "Enter your pincode: ";
+                pincode = GetInput();
+            }
+
+            app.addUser(username, email, pincode.ToNum());
+            PrintLn "User " + username + " added succesfully! You can now login.";
+        }
+    }
+    Else If (cmd == "logout") {
+        If(!app.currentUser)
+            PrintLn "Cannot log out when not logged in!";
+        Else
+            app.currentUser = null;
+    }
+    Else If (cmd == "login") {
+        If (app.currentUser)
+            PrintLn "Already logged in!";
+        Else {
+            Print "Username: ";
+            Var username = GetInput();
+            
+            If (!app.CheckUser(username))
+                PrintLn "User " + username + " does not exist!"; 
+            
+            Else {   
+                Print "Pincode: ";
+                Var pincode = GetInput();
+                If (!app.LogIn(username, pincode.ToNum()))
+                    PrintLn "Invalid pincode!";
+                Else
+                    PrintLn "Logged in!";
+            }
+        }
+    }
+    Else If (cmd == "profile") {
+        If (!app.currentUser)
+            PrintLn "Not logged in!";
+        Else {
+            PrintLn "Username: " + app.currentUser.name;
+            PrintLn "Email: " + app.currentUser.email;
+            PrintLn "Pincode: " + Str(app.currentUser.pincode);
+        }
+    }
+    Else {
+        PrintLn "Invalid command: '" + cmd + "'.";
+    }
+}

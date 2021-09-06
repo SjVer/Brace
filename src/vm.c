@@ -6,11 +6,13 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <math.h>
 
 #include "compiler.h"
 #include "common.h"
 #include "debug.h"
+#include "scanner.h"
 #include "object.h"
 #include "mem.h"
 #include "natives.h"
@@ -55,7 +57,7 @@ void runtimeError(const char *format, ...)
 	resetStack();
 }
 
-void defineNative(const char *name, NativeFn function, int arity)
+void defineNativeFn(const char *name, NativeFn function, int arity)
 {
 	push(OBJ_VAL(copyString(name, (int)strlen(name))));
 	push(OBJ_VAL(newNative(function, arity, name)));
@@ -64,8 +66,16 @@ void defineNative(const char *name, NativeFn function, int arity)
 	pop();
 }
 
+static void defineNativeVars()
+{
+	int count = sizeof NativeVars / sizeof NativeVars[0];
+	for (int i = 0; i < count; i++)
+		tableSet(&vm.nativeVars, 
+			copyString(NativeVars[i], strlen(NativeVars[i])), NULL_VAL);
+}
+
 // initialize the VM
-void initVM()
+void initVM(bool import_mode)
 {
 	resetStack();
 	vm.bytesAllocated = 0;
@@ -74,14 +84,20 @@ void initVM()
 	vm.grayCount = 0;
 	vm.grayCapacity = 0;
 	vm.grayStack = NULL;
+	initTable(&vm.nativeVars);
 	initTable(&vm.strings);
 	initTable(&vm.globals);
+	initTable(&vm.globalsTypes);
 
 	vm.initString = NULL;
-	vm.initString = copyString("init", 4);
+	vm.initString = copyString("Init", 4);
 
-	defineNatives();
-	defineAllMethods();
+	if (!import_mode)
+	{
+		defineNatives();
+		defineNativeVars();
+		defineAllMethods();
+	}
 }
 
 // free the VM
@@ -89,8 +105,10 @@ void freeVM()
 {
 	vm.initString = NULL;
 	freeObjects();
+	freeTable(&vm.nativeVars);
 	freeTable(&vm.strings);
 	freeTable(&vm.globals);
+	freeTable(&vm.globalsTypes);
 }
 
 // push a new value onto the stack
@@ -118,6 +136,8 @@ static Value peek(int distance)
 	return vm.stackTop[-1 - distance];
 }
 
+static bool checkType(Value value, ObjDataType type, const char *format);
+
 // calls the given function with the given argcount
 static bool call(ObjClosure *closure, int argCount)
 {
@@ -128,9 +148,17 @@ static bool call(ObjClosure *closure, int argCount)
 		return false;
 	}
 
+	// check arg types
+	for (int i = argCount - 1; i >= 0 ; i--)
+	{
+		Value type = closure->function->argTypes.values[argCount - i - 1];
+		if (!checkType(peek(i), *AS_DATA_TYPE(type), "Expected argument of type %s, not %s."))
+			return false;
+	}
+	
 	if (vm.frameCount == FRAMES_MAX)
 	{
-		runtimeError("Stack overflow.");
+		runtimeError("Frame stack overflow.");
 		return false;
 	}
 
@@ -142,7 +170,7 @@ static bool call(ObjClosure *closure, int argCount)
 }
 
 // attempts to call the given value with the given amount of args
-static bool callValue(Value callee, int argCount)
+bool callValue(Value callee, int argCount)
 {
 	if (IS_OBJ(callee))
 	{
@@ -162,7 +190,9 @@ static bool callValue(Value callee, int argCount)
 
 			// set fields
 			ObjInstance *instance = AS_INSTANCE(vm.stackTop[-argCount - 1]);
+			
 			tableAddAll(&klass->fields, &instance->fields);
+			tableAddAll(&klass->fieldsTypes, &instance->fieldsTypes);
 
 			Value initializer;
 			if (tableGet(&klass->methods, vm.initString, &initializer))
@@ -220,6 +250,18 @@ static bool callValue(Value callee, int argCount)
 				return false;
 
 			vm.stackTop -= argCount + 1;
+			push(result);
+			return true;
+		}
+		case OBJ_DATA_TYPE:
+		{
+			Value result = callDataType(AS_DATA_TYPE(callee), argCount, vm.stackTop - argCount);
+			if (result.type == -1)
+			{
+				// result is actually an ObjString
+				runtimeError(AS_CSTRING(result));
+				return false;
+			}
 			push(result);
 			return true;
 		}
@@ -432,6 +474,22 @@ bool isFalsey(Value value)
 	return true;
 }
 
+// check if datatype is correct (example format: "Expect type %s, not %s.")
+static bool checkType(Value value, ObjDataType type, const char* format)
+{
+	if (type.isAny) return true;
+
+	if (value.type != type.valueType ||
+		(IS_OBJ(value) && OBJ_TYPE(value) != type.objType))
+	{
+		runtimeError(format,
+			objectToString(OBJ_VAL(&type)),
+			objectToString(OBJ_VAL(newDataType(value, false))));
+		return false;
+	}
+	return true;
+}
+
 // add two strings
 static void concatenate()
 {
@@ -459,7 +517,7 @@ static void concatenate()
 
 
 // run shit
-static InterpretResult run()
+static InterpretResult run(bool repl_mode)
 {
 	CallFrame *frame = &vm.frames[vm.frameCount - 1];
 
@@ -486,24 +544,19 @@ static InterpretResult run()
 	{
 // debugging stuff
 #ifdef DEBUG_TRACE_EXECUTION
-		// sleep(0);
-		valuesEqual(NULL_VAL, NULL_VAL);
-		printf("\n\nSTACK:    ");
-		// printf("          ");
-		// if (vm.stack[0] == *vm.stackTop)
-		// printf("EMPTY");
 
+		printf("\n\nSTACK:    ");
 		for (Value *slot = vm.stack; slot < vm.stackTop; slot++)
 		{
 			printf("[");
 			printValue(*slot);
 			printf("]");
 		}
+
 		printf("\nINSTRUCT %d: ", (int)(frame->ip - frame->closure->function->chunk.code));
 		disassembleInstruction(&frame->closure->function->chunk,
 							   (int)(frame->ip - frame->closure->function->chunk.code));
-		// printf(">>> ");
-		// printf("%i", vm.globals.count);
+		printf(">>> ");
 #endif
 		// swtich for execution of each intruction
 		uint8_t instruction;
@@ -540,6 +593,18 @@ static InterpretResult run()
 			push(peek(READ_BYTE()));
 			break;
 		}
+		case OP_ASSERT_TYPE:
+		{
+			ObjDataType *type = AS_DATA_TYPE(READ_CONSTANT());
+			if (!checkType(peek(0), *type, AS_CSTRING(READ_CONSTANT())))
+				return INTERPRET_RUNTIME_ERROR;
+			break;
+		}
+		case OP_GET_TYPE:
+		{
+			push(OBJ_VAL(newDataType(peek(0),false)));
+			break;
+		}
 		case OP_TERNARY:
 		{
 			// stack: [..., condition, truevalue, falsevalue]
@@ -547,13 +612,64 @@ static InterpretResult run()
 			Value trueValue = pop();
 			Value condition = pop();
 
-			// printf("condition: "); printValue(condition);
-			// printf("\n  if true: "); printValue(trueValue);
-			// printf("\n     else: "); printValue(falseValue);
-			// printf("\nis true? %s", !isFalsey(condition) ? "yes" : "no");
-			// printf("\n");
-
 			push(!isFalsey(condition) ? trueValue : falseValue);
+			break;
+		}
+		case OP_SET_NVAR:
+		{
+			NativeVarType var = READ_BYTE();
+			// Value value = pop();
+			char *name = NativeVars[var];
+			switch (var)
+			{
+			// does nothing
+			case NVAR_NULL:
+				break;
+			
+			// sets in table
+			
+			// not allowed
+			case NVAR_LAST:
+			case NVAR_FUN:
+			case NVAR_SCRIPT:
+				runtimeError(formatString("Cannot set variable '%s'.", name));
+				return INTERPRET_RUNTIME_ERROR;
+			}
+			break;
+		}
+		case OP_GET_NVAR:
+		{
+			NativeVarType var = READ_BYTE();
+			Value value;
+			char *name = NativeVars[var];
+
+			switch (var)
+			{
+			// gets null
+			case NVAR_NULL:
+				value = NULL_VAL;
+				break;
+
+			// gets depth
+			case NVAR_FUN:
+				value = frame->closure->function->name != NULL ?
+					OBJ_VAL(frame->closure->function->name) :
+					OBJ_VAL(copyString("<script>", 8));
+				break;
+
+			// gets from table
+			case NVAR_LAST:
+			case NVAR_SCRIPT:
+				tableGet(&vm.nativeVars, copyString(name, strlen(name)), &value);
+				break;
+			}
+
+			push(value);
+			break;
+		}
+		case OP_UPDATE_LAST:
+		{
+			tableSet(&vm.nativeVars, copyString("_LAST", 5), peek(0));
 			break;
 		}
 		case OP_GET_LOCAL:
@@ -566,6 +682,30 @@ static InterpretResult run()
 		{
 			uint8_t slot = READ_BYTE();
 			frame->slots[slot] = peek(0);
+			break;
+		}
+		case OP_SET_GLOBAL:
+		{
+			ObjString *name = READ_STRING();
+			Value type;
+
+			// check type
+			if (!tableGet(&vm.globalsTypes, name, &type))
+			{
+				runtimeError("Undefined variable '%s'.", name->chars);
+				return INTERPRET_RUNTIME_ERROR;
+			}
+
+			if (!checkType(peek(0), *AS_DATA_TYPE(type), "Expect value of type %s, not %s."))
+				return INTERPRET_RUNTIME_ERROR;
+
+			// set new value
+			if (tableSet(&vm.globals, name, peek(0)))
+			{
+				runtimeError("Failed to get variable '%s'.", name->chars);
+				return INTERPRET_RUNTIME_ERROR;
+			}
+
 			break;
 		}
 		case OP_GET_GLOBAL:
@@ -583,27 +723,10 @@ static InterpretResult run()
 		case OP_DEFINE_GLOBAL:
 		{
 			ObjString *name = READ_STRING();
+			Value type = READ_CONSTANT();
+			tableSet(&vm.globalsTypes, name, type);
 			tableSet(&vm.globals, name, peek(0));
 			pop();
-			break;
-		}
-		case OP_DEFINE_FIELD:
-		{
-			ObjString *name = READ_STRING();
-			tableSet(&AS_CLASS(peek(1))->fields, name, peek(0));
-			pop();
-			break;
-		}
-		case OP_SET_GLOBAL:
-		{
-			ObjString *name = READ_STRING();
-
-			if (tableSet(&vm.globals, name, peek(0)))
-			{
-				runtimeError("Undefined variable '%s'.", name->chars);
-				return INTERPRET_RUNTIME_ERROR;
-			}
-
 			break;
 		}
 		case OP_GET_UPVALUE:
@@ -616,6 +739,15 @@ static InterpretResult run()
 		{
 			uint8_t slot = READ_BYTE();
 			*frame->closure->upvalues[slot]->location = peek(0);
+			break;
+		}
+		case OP_DEFINE_FIELD:
+		{
+			ObjString *name = READ_STRING();
+			Value type = READ_CONSTANT();
+			tableSet(&AS_CLASS(peek(1))->fields, name, peek(0));
+			tableSet(&AS_CLASS(peek(1))->fieldsTypes, name, type);
+			pop();
 			break;
 		}
 		case OP_GET_PROPERTY:
@@ -642,6 +774,25 @@ static InterpretResult run()
 				}
 			}
 
+			else if (IS_MODULE(peek(0)))
+			{
+				ObjModule *module = AS_MODULE(peek(0));
+				ObjString *name = READ_STRING();
+
+				Value value;
+
+				if (!tableGet(&module->fields, name, &value))
+				{
+					runtimeError("Undefined property '%s' of module '%s'.",
+						name->chars, module->name.chars);
+					return INTERPRET_RUNTIME_ERROR;
+				}
+
+				pop(); // module
+				push(value);
+				break;
+			}
+
 			else
 			{
 				Value value = peek(0);
@@ -659,27 +810,74 @@ static InterpretResult run()
 		}
 		case OP_SET_PROPERTY:
 		{
-			if (!IS_INSTANCE(peek(1)))
+			if (IS_INSTANCE(peek(1)))
 			{
-				runtimeError("Cannot set field of non-instance value: %s.", valueToString(peek(0)));
-				return INTERPRET_RUNTIME_ERROR;
+				ObjInstance *instance = AS_INSTANCE(peek(1));
+				ObjString *field = READ_STRING();
+				
+				// no new fields!
+				if (!tableGet(&instance->fields, field, &NULL_VAL))
+				{
+					runtimeError("Cannot declare new field '%s' outside of class declaration.", 
+						field->chars);
+					return INTERPRET_RUNTIME_ERROR;
+				}
+
+				// get type
+				Value type;
+				if(!tableGet(&instance->fieldsTypes, field, &type))
+				{
+					runtimeError("Failed to get type of property '%s'.", field->chars);
+					return INTERPRET_RUNTIME_ERROR;
+				}
+
+				if (!checkType(peek(0), *AS_DATA_TYPE(type), "Expected value of type %s, not %s."))
+					return INTERPRET_RUNTIME_ERROR;
+
+				tableSet(&instance->fields, field, peek(0));
+				
+				Value value = pop();
+				pop();
+				push(value);
+				break;
 			}
-
-			ObjInstance *instance = AS_INSTANCE(peek(1));
-
-			// no new fields!
-			ObjString *field = READ_STRING();
-			if (!tableGet(&instance->fields, field, &NULL_VAL))
+			else if (IS_MODULE(peek(1)))
 			{
-				runtimeError("Cannot create new field '%s' of instance.", field->chars);
-				return INTERPRET_RUNTIME_ERROR;
-			}
+				ObjModule *module = AS_MODULE(peek(1));
+				ObjString *field = READ_STRING();
 
-			tableSet(&instance->fields, field, peek(0));
+				// no new fields!
+				if (!tableGet(&module->fields, field, &NULL_VAL))
+				{
+					runtimeError("Cannot declare new field '%s' outside of class declaration.",
+								 field->chars);
+					return INTERPRET_RUNTIME_ERROR;
+				}
 			
-			Value value = pop();
-			pop();
-			push(value);
+				// get type
+				Value type;
+				if (!tableGet(&module->fieldsTypes, field, &type))
+				{
+					runtimeError("Failed to get type of property '%s'.", field->chars);
+					return INTERPRET_RUNTIME_ERROR;
+				}
+
+				if (!checkType(peek(0), *AS_DATA_TYPE(type), "Expected value of type %s, not %s."))
+					return INTERPRET_RUNTIME_ERROR;
+
+				tableSet(&module->fields, field, peek(0));
+
+				Value value = pop();
+				pop();
+				push(value);
+				break;
+			}
+			else
+			{
+				runtimeError("Cannot set field of non-instance value: %s.",
+							 valueToString(peek(1)));
+				return INTERPRET_RUNTIME_ERROR;
+			}
 			break;
 		}
 		case OP_GET_SUPER:
@@ -702,12 +900,13 @@ static InterpretResult run()
 				// handle negative indexing
 				index = array->array.count + index;
 
-			if (index < 0 || index > array->array.count)
+			if (index < 0 || index >= array->array.count)
 			{
 				runtimeError("Invalid index %d of array of length %d", index,	array->array.count);
 				return INTERPRET_RUNTIME_ERROR;
 			}
 
+			// printf("%d : %d\n", array->array.count, index);
 			push(array->array.values[index]);
 			break;
 		}
@@ -872,7 +1071,14 @@ static InterpretResult run()
 		case OP_PRINT:
 		{
 			printValue(pop());
-			printf("\n");
+			break;
+		}
+		case OP_PRINT_LN:
+		{
+			printValue(pop());
+			#ifndef DEBUG_TRACE_EXECUTION
+				printf("\n");
+			#endif
 			break;
 		}
 		case OP_JUMP:
@@ -972,6 +1178,8 @@ static InterpretResult run()
 
 			ObjClass *subclass = AS_CLASS(peek(0));
 			tableAddAll(&AS_CLASS(superclass)->methods, &subclass->methods);
+			tableAddAll(&AS_CLASS(superclass)->fields, &subclass->fields);
+			tableAddAll(&AS_CLASS(superclass)->fieldsTypes, &subclass->fieldsTypes);
 			pop(); // Subclass.
 			break;
 		}
@@ -980,9 +1188,115 @@ static InterpretResult run()
 			defineMethod(READ_STRING());
 			break;
 		}
+		case OP_IMPORT:
+		{
+			char *name = READ_STRING()->chars;
+			char *basename = formatString("%s.brc", name);
+			char *filepath = "";
+			FILE *file;
+			
+			// check current directory
+			{
+				// get dir of script being ran
+				Value snameval; 
+				tableGet(&vm.nativeVars, copyString("_SCRIPT", 7), &snameval);
+				
+				size_t dlength;
+				cwk_path_get_dirname(AS_CSTRING(snameval), &dlength);
+				char *sdir = formatString("%.*s", dlength, AS_CSTRING(snameval));
+
+				// join dir and basename
+				size_t fnamesize = cwk_path_join(sdir, basename, NULL, 0);
+				char fname[fnamesize];
+				cwk_path_join(sdir, basename, fname, fnamesize + 1);
+				
+				filepath = fname;
+				file = fopen(fname, "rb");
+			}
+
+			// check in lib path
+			if (file == NULL)
+			{
+				size_t dlength = cwk_path_join(BRACE_LIB_PATH, basename, NULL, 0);
+				char fname[dlength];
+				cwk_path_join(BRACE_LIB_PATH, basename, fname, dlength + 1);
+				
+				filepath = fname;
+				file = fopen(fname, "rb");
+			}
+
+			// else // not found
+			if (file == NULL)
+			{
+				runtimeError("Error importing from '%s': file '%s' not found.",
+					name, formatString("%s.brc", name));
+				return INTERPRET_RUNTIME_ERROR;
+			}
+
+			// read source
+			char *source = "";
+			{
+				fseek(file, 0L, SEEK_END);
+				size_t fileSize = ftell(file);
+				rewind(file);
+
+				char *buffer = (char *)malloc(fileSize + 1);
+				if (buffer == NULL)
+				{
+					fprintf(stderr, "Not enough memory to read \"%s\".\n", basename);
+					exit(74);
+				}
+				size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
+				if (bytesRead < fileSize)
+				{
+					fprintf(stderr, "Could not read file \"%s\".\n", basename);
+					exit(74);
+				}
+				buffer[bytesRead] = '\0';
+
+				fclose(file);
+				source = buffer;
+			}
+
+			// backup
+			VM oldVm = vm;
+
+			// interpret module
+			initVM(true);
+			tableAddAll(&oldVm.strings, &vm.strings); // keep hashed strings
+
+			#ifdef DEBUG_TRACE_EXECUTION
+			printf("\n\n======== MODULE '%s' ========\n\n", name);
+			#endif
+			InterpretResult result = interpret(filepath, source, true);
+			#ifdef DEBUG_TRACE_EXECUTION
+			printf("\n\n======== ================ ========\n\n");
+			#endif
+			free(source);
+
+			// check result
+			if (result != INTERPRET_OK)
+				return result;
+
+			// copy globals over to new module
+			ObjModule *module = newModule(name, filepath);
+			tableAddAll(&vm.globals, &module->fields);
+			tableAddAll(&vm.globalsTypes, &module->fieldsTypes);
+
+			// restore old vm
+			vm = oldVm;
+
+			push(OBJ_VAL(module));
+			break;
+		}
 		case OP_RETURN:
 		{
 			Value result = pop();
+
+			if (!checkType(result, frame->closure->function->returnType,
+					"Expected return type %s, not %s."))
+				return INTERPRET_RUNTIME_ERROR;
+
 			closeUpvalues(frame->slots);
 			vm.frameCount--;
 			if (vm.frameCount == 0)
@@ -1004,7 +1318,26 @@ static InterpretResult run()
 				runtimeError("cannot exit from script with non-number value");
 				return INTERPRET_RUNTIME_ERROR;
 			}
+
+			#ifdef DEBUG_TRACE_EXECUTION
+				printf("\nExited with code %d.\n", (int)AS_NUMBER(retval));
+			#endif
 			exit((int)AS_NUMBER(retval));
+			break;
+		}
+		case OP_SCRIPT_END:
+		{
+			if (repl_mode)
+			{
+				Value result;
+				tableGet(&vm.nativeVars, copyString("_LAST", 5), &result);
+				printf("\n(_LAST = ");
+				printValue(result);
+				printf(")\n");
+				return INTERPRET_OK;
+			}
+			else
+				return INTERPRET_OK;
 		}
 		}
 	}
@@ -1017,8 +1350,11 @@ static InterpretResult run()
 }
 
 // interpret shit and return its result
-InterpretResult interpret(const char *source, bool repl_mode)
+InterpretResult interpret(const char *path, const char *source, bool repl_mode)
 {
+	tableSet(&vm.nativeVars, copyString("_SCRIPT", 7), 
+		OBJ_VAL(copyString(path, strlen(path))));
+	
 	ObjFunction *function = compile(source);
 	if (function == NULL)
 		return INTERPRET_COMPILE_ERROR;
@@ -1028,5 +1364,9 @@ InterpretResult interpret(const char *source, bool repl_mode)
 	pop();
 	push(OBJ_VAL(closure));
 	call(closure, 0);
-	return run();
+	InterpretResult result = run(repl_mode);
+	#ifdef DEBUG_TRACE_EXECUTION
+		printf("\n");
+	#endif
+	return result;
 }

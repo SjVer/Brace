@@ -22,7 +22,9 @@ typedef struct
 
 	Value stack[STACK_MAX];
 	Value *stackTop;
+	Table nativeVars;
 	Table globals;
+	Table globalsTypes;
 	Table strings;
 	ObjString *initString;
 	ObjUpvalue *openUpvalues;
@@ -46,12 +48,14 @@ typedef enum
 extern VM vm;
 
 void runtimeError(const char *format, ...);
-void defineNative(
+bool callValue(Value callee, int argCount);
+void defineNativeFn(
 	const char *name, NativeFn function, int arity);
+void defineNativeVar(const char *name);
 bool isFalsey(Value value);
-void initVM();
+void initVM(bool import_mode);
 void freeVM();
-InterpretResult interpret(const char *source, bool repl_mode);
+InterpretResult interpret(const char *path, const char *source, bool repl_mode);
 void push(Value value);
 Value pop();
 

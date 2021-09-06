@@ -37,6 +37,9 @@ static Entry *findEntry(Entry *entries, int capacity, ObjString *key)
     for (;;)
     {
         Entry *entry = &entries[index];
+        // printf("'%s' vs '%s' ? %s\n", 
+        //     key->chars, entry->key != NULL ? entry->key->chars : "NULL",
+        //     key->chars == (entry->key != NULL ? entry->key->chars : "") ? "match" : "no match");
 
         if (entry->key == NULL)
         {
@@ -147,6 +150,8 @@ void tableAddAll(Table *from, Table *to)
 
         if (entry->key != NULL)
         {
+            // printf("\nKEY: %s, HASH: %d, VALUE: %s",
+            //     entry->key->chars, entry->key->hash, valueToString(entry->value));
             tableSet(to, entry->key, entry->value);
         }
     }

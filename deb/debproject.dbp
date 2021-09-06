@@ -1,0 +1,47 @@
+[DEBREATE-0.7.13]
+<<CTRL>>
+Package: brace
+Version: 1.0.0
+Maintainer: Sjoerd Vermeulen <sjoerd@marsenaar.com>
+Section: interpreters
+Architecture: arm64
+Priority: optional
+Description: The Brace interpreter
+ For more information go to https://github.com/SjVer/Brace
+
+<</CTRL>>
+<<FILES>>
+2
+/home/sjoerdv/Coding/Languages/Brace/bin/brace* -> brace -> /usr/bin
+/home/sjoerdv/Coding/Languages/Brace/stdlib* -> brace -> /usr/lib
+<</FILES>>
+<<SCRIPTS>>
+<<PREINST>>
+0
+<</PREINST>>
+<<POSTINST>>
+0
+<</POSTINST>>
+<<PRERM>>
+0
+<</PRERM>>
+<<POSTRM>>
+0
+<</POSTRM>>
+<</SCRIPTS>>
+<<CHANGELOG>>
+<<DEST>>DEFAULT<</DEST>>
+
+<</CHANGELOG>>
+<<COPYRIGHT>>
+
+<</COPYRIGHT>>
+<<MENU>>
+0
+<</MENU>>
+<<BUILD>>
+1
+1
+1
+strip
+<</BUILD>>

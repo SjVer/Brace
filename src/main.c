@@ -4,9 +4,13 @@
 #include <termios.h>
 
 #include "common.h"
+#include "natives.h"
 #include "chunk.h"
 #include "debug.h"
 #include "vm.h"
+#include "mem.h"
+
+
 
 // static struct termios old, new;
 // /* Read 1 character - echo defines echo mode */
@@ -26,6 +30,12 @@
 // run the REPL
 static void repl()
 {
+	printf("%s", formatString(WELCOME_MESSAGE, 
+		BRACE_VERSION_0, BRACE_VERSION_1, BRACE_VERSION_2,
+		__DATE__, __TIME__, COMPILER, __VERSION__, OS));
+
+	defineNativeFn("Help", helpNative, 0);
+
 	// bool overwrote = false;
 	// char lines[100][1024];
 	// int cnt = 0; // number of current line to be shown
@@ -86,18 +96,65 @@ static void repl()
 	// 	cnt++;
 	// }
 	
+	char *prevline = "";
 	char line[1024];
+	int depth = 0;
+
 	for (;;)
 	{
-		printf("brc:> ");
+		#ifdef DEBUG_TRACE_EXECUTION
+			printf("\n");
+		#endif
+
+		// prompt
+		printf(depth == 0 ? PROMPT_NORM : PROMPT_IND);
 	
+		// get input
 		if (!fgets(line, sizeof(line), stdin))
 		{
 			printf("\n");
 			break;
 		}
-	
-		interpret(line, true);
+
+		// trim trailing whitespaces
+		{
+			int index, i;
+
+			/* Set default index */
+			index = -1;
+
+			/* Find last index of non-white space character */
+			i = 0;
+			while (line[i] != '\0')
+			{
+				if (line[i] != ' ' && line[i] != '\t' && line[i] != '\n')
+				{
+					index = i;
+				}
+
+				i++;
+			}
+
+			/* Mark next character to last non-white space character as NULL */
+			line[index + 1] = '\0';
+		}
+
+		// handle blocks
+		for (int i = 0; i < strlen(line); i++)
+		{
+			if (line[i] == '{')
+				depth++;
+			else if (line[i] == '}')
+				depth = depth-- >= 0 ? depth : 0;
+		}
+
+		// interpret
+		if (depth == 0)
+		{
+			interpret("<repl>", formatString("%s\n%s", prevline, line), true);
+			prevline = "";
+		}
+		else prevline = formatString("%s\n%s", prevline, line);
 	}
 }
 
@@ -137,7 +194,7 @@ static char *readFile(const char *path)
 static void runFile(const char *path)
 {
 	char *source = readFile(path);
-	InterpretResult result = interpret(source, false);
+	InterpretResult result = interpret(path, source, false);
 	free(source);
 
 	if (result == INTERPRET_COMPILE_ERROR)
@@ -150,7 +207,7 @@ int main(int argc, const char *argv[])
 {
 	// bool debug = false;
 
-	initVM();
+	initVM(false);
 
 	// handle command line args
 	if (argc == 1)

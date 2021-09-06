@@ -18,6 +18,7 @@
 #define IS_STRING(value) isObjType(value, OBJ_STRING)
 #define IS_ARRAY(value) isObjType(value, OBJ_ARRAY)
 #define IS_DATA_TYPE(value) isObjType(value, OBJ_DATA_TYPE)
+#define IS_MODULE(value) isObjType(value, OBJ_MODULE)
 
 #define AS_BOUND_METHOD(value) ((ObjBoundMethod *)AS_OBJ(value))
 #define AS_CLASS(value) ((ObjClass *)AS_OBJ(value))
@@ -30,6 +31,7 @@
 #define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)
 #define AS_ARRAY(value) ((ObjArray *)AS_OBJ(value))
 #define AS_DATA_TYPE(value) ((ObjDataType *)AS_OBJ(value))
+#define AS_MODULE(value) ((ObjModule *)AS_OBJ(value))
 
 typedef enum
 {
@@ -44,6 +46,7 @@ typedef enum
 	OBJ_STRING,
 	OBJ_UPVALUE,
 	OBJ_DATA_TYPE,
+	OBJ_MODULE
 } ObjType;
 
 struct Obj
@@ -54,6 +57,25 @@ struct Obj
 };
 
 typedef Value (*NativeFn)(int argCount, Value *args);
+
+typedef struct
+{
+	Obj obj;
+	ObjString *name;
+	Table methods;
+	Table fields;
+	Table fieldsTypes;
+} ObjClass;
+
+typedef struct
+{
+	Obj obj;
+	bool isAny;
+	bool invalid;
+	ValueType valueType;
+	ObjType objType;
+	ObjClass classType;
+} ObjDataType;
 
 typedef struct
 {
@@ -70,10 +92,21 @@ typedef struct
 	Value receiver;
 } ObjBoundNativeMethod;
 
+typedef enum
+{
+	TYPE_FUNCTION,
+	TYPE_INITIALIZER,
+	TYPE_METHOD,
+	TYPE_SCRIPT
+} FunctionType;
+
 typedef struct
 {
 	Obj obj;
+	// FunctionType type;
 	int arity;
+	ValueArray argTypes;
+	ObjDataType returnType;
 	int upvalueCount;
 	Chunk chunk;
 	ObjString *name;
@@ -105,17 +138,10 @@ typedef struct
 
 typedef struct
 {
-	Obj obj;
-	ObjString *name;
-	Table methods;
-	Table fields;
-} ObjClass;
-
-typedef struct
-{
   Obj obj;
   ObjClass* klass;
   Table fields; 
+  Table fieldsTypes; 
 } ObjInstance;
 
 typedef struct
@@ -136,9 +162,11 @@ typedef struct
 typedef struct
 {
 	Obj obj;
-	ValueType valueType;
-	ObjType objType;
-} ObjDataType;
+	ObjString name;
+	ObjString path;
+	Table fields;
+	Table fieldsTypes;
+} ObjModule;
 
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method);
 ObjBoundNativeMethod *newBoundNativeMethod(Value receiver, ObjNative *native);
@@ -150,7 +178,10 @@ ObjNative *newNative(NativeFn function, int arity, const char *name);
 ObjUpvalue *newUpvalue(Value *slot);
 // ObjArray *newArray(Value *items, int length);
 ObjArray *newArray();
-ObjDataType *newDataType(Value value);
+ObjDataType *newDataType(Value value, bool isAny);
+Value callDataType(ObjDataType *callee, int argCount, Value *args);
+ObjDataType *dataTypeFromString(const char *str);
+ObjModule *newModule(const char *name, const char *path);
 ObjString *takeString(char *chars, int length);
 ObjString *copyString(const char *chars, int length);
 char *objectToString(Value value);

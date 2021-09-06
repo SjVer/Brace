@@ -1,8 +1,7 @@
-Var arr = [1,2,3];
-Print arr;
-arr.Append(4);
-Print arr;
+Fun test [] {
+    PrintLn _FUN;
+}
 
-#*
-Var typevar = TypeOf(Clock);
-Print typevar;
+PrintLn _FUN;
+
+test();

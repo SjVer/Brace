@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include "natives.h"
+#include "common.h"
 #include "mem.h"
 #include "vm.h"
 #include "value.h"
@@ -23,6 +24,12 @@ static Value nativeRuntimeError(char *msg)
     runtimeError(msg);
     return (Value){-1};
 }
+
+Value helpNative(int argCount, Value *args)
+{
+    printf(HELP_MESSAGE);
+    return NULL_VAL;
+} 
 
 // ------- NATIVES -----------
 static Value clockNative(int argCount, Value *args)
@@ -47,7 +54,9 @@ static Value sleepNative(int argCount, Value *args)
 
 static Value typeNative(int argCount, Value *args)
 {
-    return OBJ_VAL(newDataType(args[0]));
+    if (IS_INSTANCE(args[0]))
+        return OBJ_VAL(AS_INSTANCE(args[0])->klass);
+    return OBJ_VAL(newDataType(args[0], false));
 }
 
 static Value strNative(int argCount, Value *args)
@@ -117,12 +126,12 @@ static Value inputNative(int argCount, Value *args)
 
 void defineNatives()
 {
-    defineNative("Clock",    clockNative, 0);
-    defineNative("Clear",    clearNative, 0);
-    defineNative("Sleep",    sleepNative, 1);
-    defineNative("GetInput", inputNative, -1);
-    
-    defineNative("TypeOf",   typeNative,  1);
-    defineNative("Str",      strNative,   1);
-    defineNative("Bool",     boolNative,  1);
+    // functions
+    defineNativeFn("Clock",    clockNative, 0);
+    defineNativeFn("Clear",    clearNative, 0);
+    defineNativeFn("Sleep",    sleepNative, 1);
+    defineNativeFn("GetInput", inputNative, -1);   
+    defineNativeFn("TypeOf",   typeNative,  1);
+    defineNativeFn("Str",      strNative,   1);
+    defineNativeFn("Bln",      boolNative,  1);
 }

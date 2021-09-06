@@ -76,6 +76,7 @@ static TokenType checkKeyword(int start, int length, const char *rest, TokenType
 	return TOKEN_IDENTIFIER;
 }
 
+// matches keywords
 static TokenType identifierType()
 {
 	switch (scanner.start[0])
@@ -111,7 +112,15 @@ static TokenType identifierType()
 		}
 	case 'I': return checkKeyword(1, 1, "f", TOKEN_IF);
 	case 'n': return checkKeyword(1, 3, "ull", TOKEN_NULL);
-	case 'P': return checkKeyword(1, 4, "rint", TOKEN_PRINT);
+	// case 'P': return checkKeyword(1, 4, "rint", TOKEN_PRINT);
+	case 'P': // 'Print' or 'PrintLn'
+		if (scanner.current - scanner.start > 4)
+		{
+			if (scanner.current - scanner.start > 5)
+				return checkKeyword(5, 2, "Ln", TOKEN_PRINT_LN);
+			else
+				return checkKeyword(5, 0, "", TOKEN_PRINT);
+		}
 	case 'R': return checkKeyword(1, 5, "eturn", TOKEN_RETURN);
 	case 's': return checkKeyword(1, 4, "uper", TOKEN_SUPER);
 	case 't': // 'this' or 'true'
@@ -125,6 +134,7 @@ static TokenType identifierType()
 		}
 	case 'V': return checkKeyword(1, 2, "ar", TOKEN_VAR);
 	case 'W': return checkKeyword(1, 4, "hile", TOKEN_WHILE);
+	case 'U': return checkKeyword(1, 2, "se", TOKEN_USE);
 	}
 	return TOKEN_IDENTIFIER;
 }
@@ -155,6 +165,8 @@ static Token string()
 	{
 		if (peek() == '\n')
 			scanner.line++;
+		else if (peek() == '\\')
+			advance();
 		advance();
 	}
 
@@ -289,7 +301,7 @@ Token scanToken()
 	// two-character
 	// case '+': return makeToken(match('+') ? TOKEN_PLUS_PLUS : TOKEN_PLUS);
 	case '+': return makeToken(match('+') ? TOKEN_PLUS_PLUS     : match('=') ? TOKEN_PLUS_EQUAL  : TOKEN_PLUS);
-	case '-': return makeToken(match('-') ? TOKEN_MINUS_MINUS   : match('=') ? TOKEN_MINUS_EQUAL : TOKEN_MINUS);
+	case '-': return makeToken(match('-') ? TOKEN_MINUS_MINUS   : match('=') ? TOKEN_MINUS_EQUAL : match('>') ? TOKEN_ARROW : TOKEN_MINUS);
 	case '!': return makeToken(match('=') ? TOKEN_BANG_EQUAL    : TOKEN_BANG);
 	case '=': return makeToken(match('=') ? TOKEN_EQUAL_EQUAL   : TOKEN_EQUAL);
 	case '<': return makeToken(match('=') ? TOKEN_LESS_EQUAL    : TOKEN_LESS);

@@ -6,6 +6,7 @@
 #include "compiler.h"
 #include "scanner.h"
 #include "object.h"
+#include "natives.h"
 #include "mem.h"
 #ifdef DEBUG_PRINT_CODE
 #include "debug.h"
@@ -51,6 +52,7 @@ typedef struct
 	Token name;
 	int depth;
 	bool isCaptured;
+	ObjDataType type;
 } Local;
 
 typedef struct
@@ -58,14 +60,6 @@ typedef struct
 	uint8_t index;
 	bool isLocal;
 } Upvalue;
-
-typedef enum
-{
-	TYPE_FUNCTION,
-	TYPE_INITIALIZER,
-	TYPE_METHOD,
-	TYPE_SCRIPT
-} FunctionType;
 
 typedef struct Compiler
 {
@@ -118,6 +112,7 @@ static void classDeclaration();
 static void funDeclaration();
 static void expressionStatement();
 static void printStatement();
+// static void useStatement();
 static void returnStatement();
 static void exitStatement();
 static void ifStatement();
@@ -204,6 +199,8 @@ static void synchronize()
 		case TOKEN_FUN:
 		case TOKEN_VAR:
 		case TOKEN_FOR:
+		case TOKEN_FOREACH:
+		case TOKEN_EXIT:
 		case TOKEN_IF:
 		case TOKEN_WHILE:
 		case TOKEN_PRINT:
@@ -262,11 +259,24 @@ static bool match(TokenType type)
 	return true;
 }
 
+// checks if the next token is a kind of assignment and advances if so
+static bool matchAssign()
+{
+	if (!(
+		check(TOKEN_EQUAL) ||
+		check(TOKEN_PLUS_EQUAL) ||
+		check(TOKEN_MINUS_EQUAL)
+	)) return false;
+	advance();
+	return true;
+}
+
 // -------- emit/byte stuff --------
 
 // write one byte to the current chunk
 static void emitByte(uint8_t byte)
 {
+	// printf("WRITING BYTE: %d\n", byte);
 	writeChunk(currentChunk(), byte, parser.previous.line);
 }
 
@@ -349,6 +359,33 @@ static void emitConstant(Value value)
 	emitBytes(OP_CONSTANT, makeConstant(value));
 }
 
+// emits the opcodes n shit for a default value of the given type
+static void emitDefaultValue(ObjDataType *type)
+{
+	if (type->isAny) 
+	{
+		emitByte(OP_NULL);
+		return;
+	}
+
+	switch(type->valueType)
+	{
+	case VAL_NULL: emitByte(OP_NULL); return;
+	case VAL_BOOL: emitByte(OP_FALSE); return;
+	case VAL_NUMBER: emitConstant(NUMBER_VAL(0)); return;
+	case VAL_OBJ:
+		switch (type->objType)
+		{
+		case OBJ_ARRAY: emitBytes(OP_ARRAY, 0); return;
+		case OBJ_CLASS: emitConstant(OBJ_VAL(newClass(copyString("", 0)))); return;
+		case OBJ_DATA_TYPE: emitConstant(OBJ_VAL(newDataType(NULL_VAL, true))); return;
+		case OBJ_STRING: emitConstant(OBJ_VAL(copyString("", 0))); return;
+		default: emitByte(OP_NULL); return;
+		}
+	default: emitByte(OP_NULL); return;
+	}
+}
+
 // makes an identifier with the given name
 static uint8_t identifierConstant(Token *name)
 {
@@ -363,8 +400,19 @@ static bool identifiersEqual(Token *a, Token *b)
 	return memcmp(a->start, b->start, a->length) == 0;
 }
 
+// returns the nativeVar's index if it exists, else -1
+static int resolveNativeVar(Token *name)
+{
+	int count = sizeof NativeVars / sizeof NativeVars[0];
+	for (int i = 0; i < count; i++)
+		if (memcmp(NativeVars[i], name->start, name->length) == 0)
+			return i;
+	return -1;
+}
+
 // returns the local's slot if it exists, else -1
 static int resolveLocal(Compiler *compiler, Token *name)
+// static int resolveLocal(Compiler *compiler, Token *name)
 {
 	for (int i = compiler->localCount - 1; i >= 0; i--)
 	{
@@ -404,6 +452,29 @@ static int resolveUpvalue(Compiler *compiler, Token *name)
 	return -1;
 }
 
+// returns the dataType of the variable
+static ObjDataType *getVariableType(Compiler *compiler, Token *name)
+{
+	int arg = resolveLocal(current, name);
+	if (arg != -1)
+	{
+		// local
+		return &compiler->locals[arg].type;
+	}
+	else if ((arg = resolveUpvalue(current, name)) != -1)
+	{
+		// upvalue
+		return &compiler->locals[compiler->upvalues[arg].index].type;
+	}
+	else
+	{
+		// global
+		arg = identifierConstant(name);
+		
+	}
+	return NULL;
+}
+
 // adds a local with the given name automatically assigning
 // its slot and depth
 static void addLocal(Token name)
@@ -418,6 +489,7 @@ static void addLocal(Token name)
 	local->name = name;
 	local->depth = -1; // mark uninitialized
 	local->isCaptured = false;
+	local->type = *newDataType(NULL_VAL, true);
 }
 
 // like addLocal() but for upvalues
@@ -454,6 +526,19 @@ static Token syntheticToken(const char *text)
 	return token;
 }
 
+// parse a datatype identifier
+static ObjDataType *dataType(const char *errorMessage)
+{
+	consume(TOKEN_IDENTIFIER, errorMessage); // TODO: allow e.g. Fun keyword as well
+	ObjDataType *type = dataTypeFromString(
+		copyString(parser.previous.start, parser.previous.length)->chars);
+
+	if (type->invalid)
+		error(formatString("Invalid type: \"%s\".", copyString(parser.previous.start, parser.previous.length)->chars));
+
+	return type;
+}
+
 // -------- grammar stuff --------
 
 // rules for parsing any token
@@ -469,11 +554,14 @@ ParseRule rules[] = {
 	[TOKEN_DOT] 			= {NULL, 	dot,   	PREC_CALL},
 	[TOKEN_MINUS] 			= {unary, 	binary, PREC_TERM},
 	[TOKEN_MINUS_MINUS] 	= {NULL, 	postfix,PREC_CALL},
+	[TOKEN_MINUS_EQUAL] 	= {NULL, 	NULL,	PREC_NONE},
 	[TOKEN_PLUS] 			= {NULL, 	binary, PREC_TERM},
 	[TOKEN_PLUS_PLUS]		= {NULL,	postfix,PREC_CALL},
+	[TOKEN_PLUS_EQUAL]		= {NULL,	NULL,	PREC_NONE},
 	[TOKEN_QUESTION] 		= {NULL, 	ternary,PREC_TERNARY},
 	[TOKEN_COLON] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_SEMICOLON] 		= {NULL, 	NULL,   PREC_NONE},
+	[TOKEN_ARROW] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_SLASH] 			= {NULL, 	binary, PREC_FACTOR},
 	[TOKEN_STAR] 			= {NULL, 	binary, PREC_FACTOR},
 	[TOKEN_MODULO]			= {NULL,	binary, PREC_FACTOR},
@@ -490,6 +578,7 @@ ParseRule rules[] = {
 	[TOKEN_NUMBER] 			= {number, 	NULL,   PREC_NONE},
 	[TOKEN_AND] 			= {NULL, 	and_, 	PREC_AND},
 	[TOKEN_CLASS] 			= {NULL, 	NULL,   PREC_NONE},
+	[TOKEN_USE] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_ELSE] 			= {NULL, 	NULL,   PREC_NONE},
 	[TOKEN_FALSE] 			= {literal,	NULL,   PREC_NONE},
 	[TOKEN_FOR] 			= {NULL, 	NULL,   PREC_NONE},
@@ -542,7 +631,7 @@ static void parsePrecedence(Precedence precedence)
 		infixRule(canAssign);
 	}
 
-	if (canAssign && match(TOKEN_EQUAL))
+	if (canAssign && matchAssign())
 	{
 		error("Invalid assignment target.");
 		expression();
@@ -569,6 +658,8 @@ static void markInitialized()
 		return;
 	current->locals[current->localCount - 1].depth =
 		current->scopeDepth;
+	// printf("newdepth: %d of local %d\n\n", 
+	// 	current->scopeDepth, current->localCount - 1);
 }
 
 // declares a variable
@@ -601,6 +692,7 @@ static void defineVariable(uint8_t global)
 {
 	if (current->scopeDepth > 0)
 	{
+		// printf("\n\nmarking %d as initialized\n\n", global);
 		markInitialized();
 		return;
 	}
@@ -653,25 +745,28 @@ static void dot(bool canAssign)
 	consume(TOKEN_IDENTIFIER, "Expect property name after '.'.");
 	uint8_t name = identifierConstant(&parser.previous);
 
+	// assign
 	if (canAssign && match(TOKEN_EQUAL))
 	{
 		expression();
 		emitBytes(OP_SET_PROPERTY, name);
 	}
-	// increment
-	else if (canAssign && match(TOKEN_PLUS_PLUS))
+	// iadd or isub
+	else if (canAssign && (match(TOKEN_PLUS_EQUAL) || match(TOKEN_MINUS_EQUAL)))
 	{
+		TokenType type = parser.previous.type;
 		emitBytes(OP_DUPLICATE, 0);
 		emitBytes(OP_GET_PROPERTY, name);
-		emitByte(OP_INCREMENT);
+		expression();
+		emitByte(type == TOKEN_PLUS_EQUAL ? OP_ADD : OP_SUBTRACT);
 		emitBytes(OP_SET_PROPERTY, name);
 	}
-	// decrement
-	else if (canAssign && match(TOKEN_MINUS_MINUS))
+	// increment
+	else if (canAssign && (match(TOKEN_PLUS_PLUS) || match(TOKEN_MINUS_MINUS)))
 	{
 		emitBytes(OP_DUPLICATE, 0);
 		emitBytes(OP_GET_PROPERTY, name);
-		emitByte(OP_DECREMENT);
+		emitByte(parser.previous.type == TOKEN_PLUS_PLUS ? OP_INCREMENT : OP_DECREMENT);
 		emitBytes(OP_SET_PROPERTY, name);
 	}
 	// method
@@ -736,6 +831,7 @@ static void super_(bool canAssign)
 static void expression()
 {
 	parsePrecedence(PREC_ASSIGNMENT);
+	emitByte(OP_UPDATE_LAST);
 }
 
 // compile a block
@@ -756,6 +852,12 @@ static void function(FunctionType type)
 	initCompiler(&compiler, type);
 	beginScope();
 
+	// accept return type
+	if (match(TOKEN_ARROW))
+		current->function->returnType = *dataType("Expect type after '->'.");
+	else
+		current->function->returnType = *newDataType(NULL_VAL, true);
+
 	consume(TOKEN_LEFT_B_BRACE, "Expect '[' after function name.");
 
 	// parameters
@@ -769,7 +871,17 @@ static void function(FunctionType type)
 				errorAtCurrent("Can't have more than 255 parameters.");
 			}
 			uint8_t constant = parseVariable("Expect parameter name.");
+
+			// accept parameter type
+			if (match(TOKEN_COLON))
+				writeValueArray(&current->function->argTypes,
+					OBJ_VAL(dataType("Expect type after ':'.")));
+			else
+				writeValueArray(&current->function->argTypes,
+					OBJ_VAL(newDataType(NULL_VAL, true)));
+
 			defineVariable(constant);
+
 		} while (match(TOKEN_COMMA));
 	}
 	consume(TOKEN_RIGHT_B_BRACE, "Expect ']' after parameters.");
@@ -799,7 +911,7 @@ static void method()
 	FunctionType type = TYPE_METHOD;
 	
 	// check if the method is init()
-	if (parser.previous.length == 4 && memcmp(parser.previous.start, "init", 4) == 0)
+	if (parser.previous.length == 4 && memcmp(parser.previous.start, vm.initString->chars, 4) == 0)
 	{
 		type = TYPE_INITIALIZER;
 	}
@@ -835,8 +947,11 @@ static void declaration()
 // compile a statement
 static void statement()
 {
-	if (match(TOKEN_PRINT))
+	if (match(TOKEN_PRINT) || match(TOKEN_PRINT_LN))
 		printStatement();
+
+	// else if (match(TOKEN_USE))
+	// 	useStatement();
 
 	else if (match(TOKEN_FOR))
     	forStatement();
@@ -871,29 +986,80 @@ static void varDeclaration()
 {
 	uint8_t global = parseVariable("Expect variable name.");
 
+	if (resolveNativeVar(&parser.previous) != -1)
+		error(formatString(
+			"Cannot redeclare native variable '%.*s'.",
+			parser.previous.length, parser.previous.start));
+
+	ObjDataType *type = newDataType(NULL_VAL, true);
+	bool hasType = false;
+
+	if (match(TOKEN_COLON))
+	{
+		type = dataType("Expect type after ':'.");
+		hasType = true;
+		current->locals[current->localCount - 1].type = *type;
+	}
+
 	if (match(TOKEN_EQUAL))
 		expression();
 	else
-		emitByte(OP_NULL);
-	
+		emitDefaultValue(type);
+
+	if (hasType)
+	{
+		char *msg = "Expected value of type %s, not %s.";
+		emitByte(OP_ASSERT_TYPE);
+		emitBytes(
+			addConstant(currentChunk(), OBJ_VAL(type)),
+			addConstant(currentChunk(), OBJ_VAL(copyString(msg, strlen(msg))))
+		);
+	}
+
 	consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
 
 	defineVariable(global);
+	// if it is a global it emitted OP_DEFINE_GLOBAL which expects a 3rd
+	// operand (the datatype) as well
+	if (current->scopeDepth == 0)
+		emitByte(addConstant(currentChunk(), OBJ_VAL(type)));
 }
 
 // compiles a field declaration
 static void fieldDeclaration()
 {
 	uint8_t field = parseVariable("Expect variable name.");
+	ObjDataType *type = newDataType(NULL_VAL, true);
+	bool hasType = false;
 
+	if (match(TOKEN_COLON))
+	{
+		type = dataType("Expect type after ':'.");
+		hasType = true;
+	}
+
+	bool defined = false;
 	if (match(TOKEN_EQUAL))
+	{
 		expression();
+		defined = true;
+	}
 	else
-		emitByte(OP_NULL);
+		emitDefaultValue(type);
+
+	if (hasType && defined)
+	{
+		char *msg = "Expected value of type %s, not %s.";
+		emitByte(OP_ASSERT_TYPE);
+		emitBytes(
+			addConstant(currentChunk(), OBJ_VAL(type)),
+			addConstant(currentChunk(), OBJ_VAL(copyString(msg, strlen(msg)))));
+	}
 
 	consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
 
 	emitBytes(OP_DEFINE_FIELD, field);
+	emitByte(addConstant(currentChunk(), OBJ_VAL(type)));
 }
 
 // compiles a class declaration
@@ -909,6 +1075,10 @@ static void classDeclaration()
 
 	emitBytes(OP_CLASS, nameConstant);
 	defineVariable(nameConstant);
+	// third arg for OP_DEFINE_GLOBAL
+	if (current->scopeDepth == 0)
+		emitByte(addConstant(currentChunk(),
+			OBJ_VAL(newDataType(OBJ_VAL(newClass(copyString("", 0))), false))));
 
 	// let the compiler know we're compiling a class
 	ClassCompiler classCompiler;
@@ -947,7 +1117,10 @@ static void classDeclaration()
 		if (match(TOKEN_VAR))
 			fieldDeclaration();
 		else
+		{
+			consume(TOKEN_FUN, "Expect 'Var' or 'Fun' declaration.");
 			method();
+		}
 	}
 
 	consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
@@ -968,6 +1141,13 @@ static void funDeclaration()
 	markInitialized();
 	function(TYPE_FUNCTION);
 	defineVariable(global);
+	// if it is a global it emitted OP_DEFINE_GLOBAL which expects a 3rd
+	// operand (the datatype) as well
+	if (current->scopeDepth == 0)
+	{
+		ObjDataType *type = newDataType(OBJ_VAL(newFunction()), false);
+		emitByte(addConstant(currentChunk(), OBJ_VAL(type)));
+	}
 }
 
 // compiles an expression statement
@@ -978,14 +1158,64 @@ static void expressionStatement()
 	emitByte(OP_POP);
 }
 
+// // compiles a use statement
+// static void useStatement()
+// {
+// 	if (current->type != TYPE_SCRIPT)// || current->scopeDepth != 0)
+// 		error("'Use' keyword only allowed in top-level code.");
+//
+// 	consume(TOKEN_IDENTIFIER, "Expect module name after 'Use'.");
+// 	Token *modulename = &parser.previous;
+// 	emitBytes(OP_IMPORT, addConstant(currentChunk(), 
+// 		OBJ_VAL(copyString(modulename->start, modulename->length))));
+//
+// 	// check if importing from the module or importing the module
+// 	if (match(TOKEN_ARROW))
+// 	{
+// 		consume(TOKEN_LEFT_B_BRACE, "Expect '[' after '->'.");
+//
+// 		uint8_t count = 0;
+// 		if (!check(TOKEN_RIGHT_B_BRACE))
+// 		{
+// 			do
+// 			{
+// 				consume(TOKEN_IDENTIFIER, "Expect identifier.");
+// 				uint8_t name = identifierConstant(&parser.previous);
+//
+// 				if (count == 255)
+// 					error("Can't have more than 255 arguments.");
+// 				count++;
+//			
+// 				emitBytes(OP_DUPLICATE, 0);
+// 				emitBytes(OP_GET_PROPERTY, name);
+// 				emitBytes(OP_DEFINE_GLOBAL, name);
+// 				emitByte(addConstant(currentChunk(),
+// 					OBJ_VAL(newDataType(NULL_VAL, true))));
+//
+// 			} while (match(TOKEN_COMMA));
+// 		}
+// 		consume(TOKEN_RIGHT_B_BRACE, "Expect ')' after arguments.");
+// 		emitByte(OP_POP); // pop module
+// 	}
+// 	else // normal import
+// 	{
+// 		uint8_t name = identifierConstant(modulename);
+// 		emitBytes(OP_DEFINE_GLOBAL, name);
+// 		emitByte(addConstant(currentChunk(),
+// 			OBJ_VAL(newDataType(OBJ_VAL(newModule("","")), false))));
+// 	}
+// 	consume(TOKEN_SEMICOLON, "Expect ';' after import statement.");
+// }
+
 // compiles a print statement
 static void printStatement()
 {
+	TokenType type = parser.previous.type;
 	// consume(TOKEN_LEFT_PAREN, "Expect '(' after 'Print'.");
 	expression();
 	// consume(TOKEN_RIGHT_PAREN, "Expect ')' after value.");
 	consume(TOKEN_SEMICOLON, "Expect ';' after ')'.");
-	emitByte(OP_PRINT);
+	emitByte(type == TOKEN_PRINT ? OP_PRINT : OP_PRINT_LN);
 }
 
 // compiles a return statement
@@ -1048,6 +1278,7 @@ static void ifStatement()
 
 	if (match(TOKEN_ELSE))
 		statement();
+	// else if (match(TOKEN_ELIF))
 	patchJump(elseJump);
 }
 
@@ -1109,10 +1340,16 @@ static void foreachStatement()
 	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'Foreach'.");
 	
 	// item
-	uint8_t item = parseVariable("Expect identifier after '('.");
+	parseVariable("Expect identifier after '('.");
+
+	// if (resolveNativeVar(&parser.previous) != -1)
+	// 	error(formatString(
+	// 		"Cannot redeclare native variable '%.*s'.",
+	// 		parser.previous.length, parser.previous.start));
+
+	uint8_t item = current->localCount - 1;
 	emitByte(OP_NULL);
-	emitBytes(OP_SET_LOCAL, item); // make the item variable exist
-	markInitialized();
+	defineVariable(item);
 
 	consume(TOKEN_COLON, "Expect ':' after identifier.");
 	// array
@@ -1123,7 +1360,7 @@ static void foreachStatement()
 	// item we currently have and when to stop
 	emitBytes(OP_DUPLICATE, 0);
 	emitByte(OP_ARRAY_LENGTH);
-	// stack: [..., item, array, lenght]
+	// stack: [..., null, array, lenght]
 	
 	int loopStart = currentChunk()->count;
 
@@ -1133,12 +1370,12 @@ static void foreachStatement()
 	// set item variable to current item
 	emitBytes(OP_DUPLICATE, 1);
 	emitBytes(OP_DUPLICATE, 1);
-	// stack: [..., item, array, length, array, length]
+	// stack: [..., null/item, array, length, array, length]
 	emitByte(OP_NEGATE);
-	// stack: [..., item, array, length, array, index]
+	// stack: [..., null/item, array, length, array, index]
 	emitByte(OP_GET_INDEX);
 	// stack: [..., item, array, length, value]
-	emitBytes(OP_SET_LOCAL, item+1);
+	emitBytes(OP_SET_LOCAL, item);
 	// stack: [..., new_item, array, length]
 
 	// block
@@ -1149,6 +1386,9 @@ static void foreachStatement()
 	emitLoop(loopStart);
 
 	patchJump(exitJump);
+	// stack: [..., new_item, array]
+	emitBytes(OP_POP, OP_POP);
+	endScope();
 }
 
 // compiles a while statement
@@ -1210,21 +1450,30 @@ static void index(bool canAssign)
 		expression();
 		emitByte(OP_SET_INDEX);
 	}
-	else if (canAssign && match(TOKEN_PLUS_PLUS))
+	else if (canAssign && (match(TOKEN_PLUS_EQUAL) || match(TOKEN_MINUS_EQUAL)))
 	{
+		TokenType type = parser.previous.type;
 		// stack: [array, index]
 		emitBytes(OP_DUPLICATE, (uint8_t)1);
 		emitBytes(OP_DUPLICATE, (uint8_t)1);
 		// stack: [array, index, array, index]
-		emitBytes(OP_GET_INDEX, OP_INCREMENT);
-		// stack: [array, index, newvalue]
-		emitByte(OP_SET_INDEX);
+		emitByte(OP_GET_INDEX);
+		// stack: [array, index, oldvalue]
+		expression();
+		// stack: [array, index, oldvalue, added]
+		emitBytes(type == TOKEN_PLUS_EQUAL ? OP_ADD : OP_SUBTRACT, OP_SET_INDEX);
 	}
-	else if (canAssign && match(TOKEN_MINUS_MINUS))
+	else if (canAssign && (match(TOKEN_PLUS_PLUS) || match(TOKEN_MINUS_MINUS)))
 	{
+		TokenType type = parser.previous.type;
+
+		// stack: [array, index]
 		emitBytes(OP_DUPLICATE, (uint8_t)1);
 		emitBytes(OP_DUPLICATE, (uint8_t)1);
-		emitBytes(OP_GET_INDEX, OP_DECREMENT);
+		// stack: [array, index, array, index]
+		emitBytes(OP_GET_INDEX,
+			type == TOKEN_PLUS_PLUS ? OP_INCREMENT : OP_DECREMENT);
+		// stack: [array, index, newvalue]
 		emitByte(OP_SET_INDEX);
 	}
 	else
@@ -1242,16 +1491,27 @@ static void string(bool canAssign)
 static void namedVariable(Token name, bool canAssign)
 {
 	uint8_t getOp, setOp;
-	int arg = resolveLocal(current, &name);
+	int arg = resolveNativeVar(&name);
+	ObjDataType *type;
+	
+	// native var
 	if (arg != -1)
+	{
+		getOp = OP_GET_NVAR;
+		setOp = OP_SET_NVAR;
+		type = newDataType(NULL_VAL, true);
+	}
+	else if ((arg = resolveLocal(current, &name)) != -1)
 	{
 		getOp = OP_GET_LOCAL;
 		setOp = OP_SET_LOCAL;
+		type = getVariableType(current, &name);
 	}
 	else if ((arg = resolveUpvalue(current, &name)) != -1)
 	{
 		getOp = OP_GET_UPVALUE;
 		setOp = OP_SET_UPVALUE;
+		type = getVariableType(current, &name);
 	}
 	else
 	{
@@ -1264,20 +1524,35 @@ static void namedVariable(Token name, bool canAssign)
 	if (canAssign && match(TOKEN_EQUAL))
 	{
 		expression();
+
+
+		const char *msg = "Expected value of type %s, not %s.";
+		if (setOp != OP_SET_GLOBAL)
+		{
+			emitByte(OP_ASSERT_TYPE);
+			emitBytes(
+				addConstant(currentChunk(), OBJ_VAL(type)),
+				addConstant(currentChunk(), OBJ_VAL(copyString(msg, strlen(msg))))
+			);
+		}
+
 		emitBytes(setOp, (uint8_t)arg);
 	}
-	// incrementing
-	else if (canAssign && match(TOKEN_PLUS_PLUS))
+	// incrementing / decrementing
+	else if (canAssign && (match(TOKEN_PLUS_PLUS) || match(TOKEN_MINUS_MINUS)))
 	{
+		TokenType type = parser.previous.type;
 		namedVariable(name, false);
-		emitByte(OP_INCREMENT);
+		emitByte(type == TOKEN_PLUS_PLUS ? OP_INCREMENT : OP_DECREMENT);
 		emitBytes(setOp, (uint8_t)arg);
 	}
-	// decrementing
-	else if (canAssign && match(TOKEN_MINUS_MINUS))
+	// iadd and isub
+	else if (canAssign && (match(TOKEN_PLUS_EQUAL) || match(TOKEN_MINUS_EQUAL)))
 	{
+		TokenType type = parser.previous.type;
 		namedVariable(name, false);
-		emitByte(OP_DECREMENT);
+		expression();
+		emitByte(type == TOKEN_PLUS_EQUAL ? OP_ADD : OP_SUBTRACT);
 		emitBytes(setOp, (uint8_t)arg);
 	}
 	// just declaration
@@ -1477,7 +1752,9 @@ static void initCompiler(Compiler *compiler, FunctionType type)
 // end the compilation process
 static ObjFunction* endCompiler()
 {
-	emitReturn();
+	// emitReturn();
+	emitByte(OP_SCRIPT_END);
+
 	ObjFunction *function = current->function;
 #ifdef DEBUG_PRINT_CODE
 	if (!parser.hadError)

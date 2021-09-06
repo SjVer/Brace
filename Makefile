@@ -4,7 +4,8 @@
 
 # Compiler settings - Can be customized.
 CC = gcc
-CXXFLAGS = -std=c11 -Wall -lm
+libpath = /usr/lib/brace
+CXXFLAGS = -std=c11 -Wall -lm -D COMPILER=\"$(CC)\" -D BRACE_LIB_PATH=\"$(libpath)\"
 LDFLAGS = 
 
 # Makefile settings - Can be customized.
@@ -14,19 +15,17 @@ SRCDIR = src
 HEADERDIR = $(SRCDIR)/headers
 BINDIR = bin
 OBJDIR = $(BINDIR)/obj
-DEPDIR = $(BINDIR)/dep
 
 ############## Do not change anything from here downwards! #############
 SRC = $(wildcard $(SRCDIR)/*$(EXT))
 # HEADERS = $(wildcard $(HEADERDIR)/*.h)
 OBJ = $(SRC:$(SRCDIR)/%$(EXT)=$(OBJDIR)/%.o)
-DEPS = $(SRC:$(SRCDIR)/%$(EXT)=$(DEPDIR)/%.d)
 APP = $(BINDIR)/$(APPNAME)
 DEP = $(OBJ:$(OBJDIR)/%.o=%.d)
 
-DEBUGDEFS = -DDEBUG_TRACE_EXECUTION -DDEBUG_PRINT_CODE
-DEBUG_GC_LOG_DEFS = -DDEBUG_LOG_GC
-DEBUG_GC_STRESS_DEGS = -DDEBUG_STRESS_GC
+DEBUGDEFS = -D DEBUG_TRACE_EXECUTION -D DEBUG_PRINT_CODE
+DEBUG_GC_LOG_DEFS = -D DEBUG_LOG_GC
+DEBUG_GC_STRESS_DEGS = -D DEBUG_STRESS_GC
 
 OBJCOUNT_NOPAD = $(shell v=`echo $(OBJ) | wc -w`; echo `seq 1 $$(expr $$v)`)
 # LAST = $(word $(words $(OBJCOUNT_NOPAD)), $(OBJCOUNT_NOPAD))
@@ -40,10 +39,6 @@ OBJCOUNT = $(foreach v,$(OBJCOUNT_NOPAD),$(shell printf '%02d' $(v)))
 RM = rm
 MKDIR = mkdir
 DELOBJ = $(OBJ)
-# Windows OS variables & settings
-DEL = del
-EXE = .exe
-WDELOBJ = $(SRC:$(SRCDIR)/%$(EXT)=$(OBJDIR)\\%.o)
 
 ########################################################################
 ####################### Targets beginning here #########################
@@ -59,16 +54,6 @@ $(APP): $(OBJ) | makedirs
 	@#cp $(APP) "."
 	@printf "\b\b done!\n"
 
-# Creates the dependecy rules
-%.d: $(SRCDIR)/%$(EXT) | makedirs
-# $(DEPS): $(SRCDIR)/%$(EXT) | makedirs
-	@printf "dep!!! compiling $(notdir $<) into $(notdir $@)..."
-	$(CPP) $(CFLAGS) $< -MM -MT $(DEPS) >$@
-	@printf "\b\b done!\n"
-
-# Includes all .h files
--include $(DEPS)
-
 # Building rule for .o files and its .c/.cpp in combination with all .h
 # $(OBJDIR)/%.o: $(SRCDIR)/%$(EXT) | makedirs
 $(OBJDIR)/%.o: $(SRCDIR)/%$(EXT) | makedirs
@@ -83,24 +68,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%$(EXT) | makedirs
 clean:
 	@# $(RM) $(DELOBJ) $(DEP) $(APP)
 	@$(RM) -rf $(OBJDIR)
-	@$(RM) -rf $(DEPDIR)
 	@$(RM) -rf $(BINDIR)
-
-# # Cleans only all files with the extension .d
-# .PHONY: cleandep
-# cleandep:
-# 	$(RM) $(DEP)
-
-# #################### Cleaning rules for Windows OS #####################
-# # Cleans complete project
-# .PHONY: cleanw
-# cleanw:
-# 	$(DEL) $(WDELOBJ) $(DEP) $(APPNAME)$(EXE)
-
-# # Cleans only all files with the extension .d
-# .PHONY: cleandepw
-# cleandepw:
-# 	$(DEL) $(DEP)
 
 .PHONY: run
 run: $(APP)
@@ -114,7 +82,6 @@ routine: $(APP) run clean
 makedirs:
 	@$(MKDIR) -p $(BINDIR)
 	@$(MKDIR) -p $(OBJDIR)
-	@$(MKDIR) -p $(DEPDIR)
 
 .PHONY: remake
 remake: clean $(APP)

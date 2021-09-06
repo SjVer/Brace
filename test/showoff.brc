@@ -1,0 +1,56 @@
+# basic stuff
+
+Print "Enter a number: ";
+Var mynum = GetInput().ToNum();
+
+Fun myfunc -> Str [number: Num] {
+    Var ret = "The number is ";
+    ret += Str(number);
+    Return ret;
+}
+
+Var mystring = myfunc(mynum);
+PrintLn mystring;
+
+Var mybool = true;
+If (mybool) { PrintLn "true!"; }
+mybool = !mybool;
+
+If (mybool || true) {
+    PrintLn "true!";
+} Else {
+    PrintLn "false!";
+}
+
+PrintLn TypeOf(mybool);
+
+# arrays
+Var myarray = [5, 3, 9, 12];
+
+Foreach(number : myarray) {
+    PrintLn myfunc(number);
+}
+
+# classes
+Cls myClass {
+    Var numField;
+    Var strField : Str;
+
+    Fun Init [number : Num, string : Str] {
+        this.numField = number;
+        this.strField = string;
+    }
+
+    Fun myMethod [somevalue] {
+        PrintLn this.numField;
+        PrintLn "\"" + this.strField + "\"";
+        PrintLn somevalue;
+    }
+}
+
+Var myInstance = myClass(3.2, "test");
+myInstance.myMethod(true);
+
+Var secondInstace = TypeOf(myInstance)(12, "lol");
+
+Exit 0;
